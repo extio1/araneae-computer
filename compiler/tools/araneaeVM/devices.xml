@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VmDevicesConfiguration xmlns="Portable.TargetPlatform.Vm.Devices">
+
+  <DeviceType Id="1" Name="SimplePic" />
+  <DeviceType Id="2" Name="SimpleClock" />
+  <DeviceType Id="3" Name="SimplePipe" />
+  
+  <Device DeviceType="SimplePic" Id="0" Name="PIC">
+    <IoPortMap PortType="state" Id="0" BankName="datas" Mode="RAM">
+      <InitialBinding StartAddress="0xF000" Length="0x100" />
+    </IoPortMap>
+    <IoPortMap PortType="handlers-map" Id="8" BankName="datas" Mode="RAM">
+      <InitialBinding StartAddress="0xF100" Length="0x100" />
+    </IoPortMap>
+    <Parameter Name="HandlersTableEntrySize" Value="4" />
+  </Device>
+  
+  <Device DeviceType="SimpleClock" Id="1" Name="Timer">
+    <IoPortMap PortType="state" Id="0" BankName="datas" Mode="RAM">
+      <InitialBinding StartAddress="0xE000" />
+    </IoPortMap>
+    
+    <Signal Id="0" Name="on-cycles" Interrupt="0" />
+  </Device>
+
+  <!-- stdout/stdin (use -ip in ${MANAGER}) -->
+  <Device DeviceType="SimplePipe" Id="2" Name="Stdio">
+    <IoPortMap PortType="control" Id="0" BankName="datas" Mode="RAM">
+        <InitialBinding StartAddress="0xD000" Length="0x100" />
+    </IoPortMap>
+    <IoPortMap PortType="outbox" Id="1" BankName="datas" Mode="RAM">
+        <InitialBinding StartAddress="0xD100" Length="0x100" />
+    </IoPortMap>
+
+    <Parameter Name="PipeSpec" Value="stdio" />
+  </Device>
+  
+</VmDevicesConfiguration>

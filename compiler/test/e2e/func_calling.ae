@@ -1,0 +1,22 @@
+method g(C)
+begin
+	ret C + 256;
+end;
+
+method f(A, B)
+begin
+	C := 0;
+	if (A == B); then
+	begin
+		C := C + 10;
+	end;
+	ret g(C);
+end;
+
+method main()
+begin
+	A := 10;
+	B := -10;
+	D := f(A, B);
+	ret D;
+end;

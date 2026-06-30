@@ -1,0 +1,27 @@
+method func1 ();
+method func2 (V1) : string;
+method func3 (V1, V2, V3, V4, V5);
+method func4 (V1: int, V2 : uint, V3 :string, V4 : UserType);
+method func5 (V1: int, V2);
+
+method func6 (V1: int, V2) 
+begin
+	if true then
+		begin
+			while true do
+				func1();
+			brek;
+			break;
+		end;
+	break;
+end;
+
+method func7 (V1: int, V2)
+var
+	A, B, C;
+	D : array [1, 2] of int;
+	E, F : string;
+begin
+	A + B * C + func6(A, B, C);
+	break;
+end;

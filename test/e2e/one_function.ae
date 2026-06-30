@@ -1,0 +1,9 @@
+method funcName (V1, V2, V3, V4) 
+begin
+	if true then
+		begin
+			while true do
+			  !func1();
+		end;
+	break;
+end;

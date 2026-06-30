@@ -1,0 +1,6 @@
+method main()
+begin
+	A := 10;
+	B := A + 12 * (5 - 4);
+	ret B;
+end;

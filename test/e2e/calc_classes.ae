@@ -1,0 +1,139 @@
+method readChar();
+method writeChar(CharValue);
+
+method readOp()
+begin
+  Op := readChar();
+  readChar();
+  ret Op;
+end;
+
+method readInt()
+begin
+  Digit := 0;
+  Res := 0;
+  
+  Digit := readChar();
+  
+  repeat
+  begin
+    Res := Res * 10 + (Digit - 48);
+    Digit := readChar();
+  end;
+  while Digit != '\n';
+
+  ret Res;
+end;
+
+method printUInt(Value)
+begin
+  Divider := 1;
+
+  Tmp := Value;
+  while Tmp >= 10; do
+  begin
+    Divider := Divider * 10;
+    Tmp := Tmp / 10;
+  end;
+
+  while Divider > 0; do
+  begin
+    Symbol := Value / Divider + 48;
+    writeChar(Symbol);
+    Value := Value % Divider;
+    Divider := Divider / 10;
+  end;
+
+  writeChar('\n');
+  ret;
+end;
+
+method printInt(Value)
+begin
+  if (Value >> 63) != 0; then
+  begin
+    writeChar('-');
+    Value := ~Value + 1;
+  end;
+
+  printUInt(Value);
+  ret;
+end;
+
+
+class Calculator 
+  var Accumulator;
+      A, B, C;
+      D;
+begin
+  public method Calculator() 
+  begin 
+    this.Accumulator := 0;
+  end;
+
+  method add(Term)
+  begin
+    this.Accumulator := this.Accumulator + Term; 
+    ret this.Accumulator;
+  end;
+
+  public method sub(Term)
+  begin
+    this.Accumulator := this.Accumulator - Term; 
+    ret this.Accumulator;
+  end;
+
+  public method mul(Mult)
+  begin
+    this.Accumulator := this.Accumulator * Mult; 
+    ret this.Accumulator;
+  end;
+
+  public method div(Mult)
+  begin
+    this.Accumulator := this.Accumulator / Mult;
+    ret this.Accumulator;
+  end;
+end;
+
+
+method main()
+begin
+  PrevVal := 0;
+  Result := 0;
+
+  Calc := Calculator();
+
+  while true; do 
+  begin
+    Op := readOp();
+
+    if Op == 'q'; then
+    begin
+      break;
+    end;
+
+    InputVal := readInt();
+
+    if Op == '+'; then
+		begin
+			Result := Calc.add(InputVal);
+		end;
+    if Op == '-'; then
+    begin
+      Result := Calc.sub(InputVal);
+    end;
+    if Op == '*'; then
+    begin
+      Result := Calc.mul(InputVal);
+    end;
+    if Op == '/'; then
+    begin
+      Result := Calc.div(InputVal);
+    end;
+
+    printInt(Result);
+  end;
+
+  ret Result;
+end;

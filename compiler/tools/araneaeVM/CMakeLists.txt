@@ -1,0 +1,18 @@
+set(TARGET_DEF_OUT ARARCH.target.pdsl)
+set(TARGET_DEF_IN ${TARGET_DEF_OUT}.in)
+
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DEF_OUT}
+    COMMAND ${CMAKE_C_COMPILER} -E -P -x c
+            -I${ARANEAE_COMPILER_SOURCE_INCLUDE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_DEF_IN}
+            -o ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DEF_OUT}
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/validate.sh
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${TARGET_DEF_IN}
+    COMMENT "Generate ISA target-definition file"
+    VERBATIM
+)
+
+add_custom_target(target-definition ALL 
+  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DEF_OUT}
+)

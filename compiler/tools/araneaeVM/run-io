@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Parameters info for task ExecuteBinaryWithInteractiveInput
+#     stdinRegStName : 
+#     stdoutRegStName : 
+#     definitionFile : 
+#     archName : 
+#     binaryFileToRun : 
+#     codeRamBankName : 
+#     ipRegStorageName : 
+#     finishMnemonicName : 
+# Results of task ExecuteBinaryWithInteractiveInput
+#     trace.txt : 
+#     stdout.txt : Standard output result
+#     stderr.txt : Standard error result
+
+set -e
+
+ASM_SOURCE=$1
+ARANEAE_SCRIPT_DIR=$(dirname ${BASH_SOURCE[0]})
+
+source ${ARANEAE_SCRIPT_DIR}/source.sh
+
+echo $MANAGER -s Assemble asmListing $ASM_SOURCE,$ARANEAE_SCRIPT_DIR/../../test/e2e/builtins.S definitionFile $DEFINITION_FILE archName $ARCH_NAME
+ASM_DISPATCH_SCRIPT_OUT=`$MANAGER -s Assemble asmListing $ASM_SOURCE,$ARANEAE_SCRIPT_DIR/../../test/e2e/builtins.S definitionFile $DEFINITION_FILE archName $ARCH_NAME`
+
+echo ASM_DISPATCH_SCRIPT_OUT=$ASM_DISPATCH_SCRIPT_OUT
+ASM_DISPATCH_UUID=`echo "$ASM_DISPATCH_SCRIPT_OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'`
+echo ASM_DISPATCH_UUID=$ASM_DISPATCH_UUID
+
+GET_BINARY_MODULE_SCRIPT_OUT=`$MANAGER -g $ASM_DISPATCH_UUID -r out.ptptb`
+echo GET_BINARY_MODULE_SCRIPT_OUT=$GET_BINARY_MODULE_SCRIPT_OUT
+
+BINARY_MODULE_PATH="./out.ptptb"
+echo "Got out binary"
+${MANAGER} --verbose -il -w -s ExecuteBinaryWithInteractiveInput stdinRegStName s_in stdoutRegStName s_out definitionFile ${DEFINITION_FILE} archName ${ARCH_NAME} binaryFileToRun ${BINARY_PATH} codeRamBankName code ipRegStorageName IP finishMnemonicName hlt
+
+# $MANAGER -s Assemble asmListing ../test/e2e/test_io.ae.S,../test/e2e/builtins.S definitionFile $DEFINITION_FILE archName $ARCH_NAME
+# $MANAGER -g e5ea5a8d-ab4f-460d-9d21-c5be8f570973 -r out.ptptb
+# $MANAGER --verbose -il -w -s ExecuteBinaryWithInput inputFile input stdinRegStName s_in stdoutRegStName s_out definitionFile ${DEFINITION_FILE} archName ${ARCH_NAME} binaryFileToRun out.ptptb codeRamBankName code ipRegStorageName IP finishMnemonicName hlt

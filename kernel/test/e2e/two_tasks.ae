@@ -1,0 +1,51 @@
+class Scheduler
+var
+  Tasks;
+begin
+  public method Scheduler() 
+  begin
+  end;
+
+  public method add()
+  begin
+    
+  end;
+
+  public method start()
+  begin
+    
+  end;
+end;
+
+class Task1
+begin
+  public method Scheduler() 
+  begin
+  end;
+
+  public method run()
+  begin
+
+  end;
+end;
+
+class Task2
+begin
+  public method Scheduler() 
+  begin
+  end;
+
+  public method run()
+  begin
+
+  end;
+end;
+
+method main()
+begin
+  S = Scheduler();
+  T1 = Task1();
+  T2 = Task2();
+
+
+end;

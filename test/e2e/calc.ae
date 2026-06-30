@@ -1,0 +1,101 @@
+method readChar();
+method writeChar(CharValue);
+
+method readOp()
+begin
+  Op := readChar();
+  readChar();
+  ret Op;
+end;
+
+method readInt()
+begin
+  Digit := 0;
+  Res := 0;
+  
+  Digit := readChar();
+  
+  repeat
+  begin
+    Res := Res * 10 + (Digit - 48);
+    Digit := readChar();
+  end;
+  while Digit != '\n';
+
+  ret Res;
+end;
+
+method printUInt(Value)
+begin
+  Divider := 1;
+
+  Tmp := Value;
+  while Tmp >= 10; do
+  begin
+    Divider := Divider * 10;
+    Tmp := Tmp / 10;
+  end;
+
+  while Divider > 0; do
+  begin
+    Symbol := Value / Divider + 48;
+    writeChar(Symbol);
+    Value := Value % Divider;
+    Divider := Divider / 10;
+  end;
+
+  writeChar('\n');
+  ret;
+end;
+
+method printInt(Value)
+begin
+  if (Value >> 63) != 0; then
+  begin
+    writeChar('-');
+    Value := ~Value + 1;
+  end;
+
+  printUInt(Value);
+  ret;
+end;
+
+
+method main()
+begin
+  PrevVal := 0;
+  Result := 0;
+
+  while true; do 
+  begin
+    Op := readOp();
+
+    if Op == 'q'; then
+    begin
+      break;
+    end;
+
+    InputVal := readInt();
+
+    if Op == '+'; then
+		begin
+			Result := Result + InputVal;
+		end;
+    if Op == '-'; then
+    begin
+      Result := Result - InputVal;
+    end;
+    if Op == '*'; then
+    begin
+      Result := Result * InputVal;
+    end;
+    if Op == '/'; then
+    begin
+      Result := Result / InputVal;
+    end;
+
+    printInt(Result);
+  end;
+
+  ret Result;
+end;

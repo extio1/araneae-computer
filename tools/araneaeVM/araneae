@@ -1,0 +1,42 @@
+#!/bin/bash
+
+CWD=$(dirname $0)
+source ${CWD}/source.sh
+
+set -e
+
+
+SOURCES=$*
+
+LAUNCH_SEED=$RANDOM
+OUTPUT_DIR=./output
+COMPILATION_OUTPUT_DIR=$OUTPUT_DIR/$LAUNCH_SEED/compilation
+EXECUTION_OUTPUT_DIR=$OUTPUT_DIR/$LAUNCH_SEED/execution
+
+echo === Create output directory $OUTPUT_DIR:
+mkdir -p $OUTPUT_DIR
+
+echo === Create compilation out directory $COMPILATION_OUTPUT_DIR:
+mkdir -p $COMPILATION_OUTPUT_DIR
+
+echo === Create execution out directory $EXECUTION_OUTPUT_DIR:
+mkdir -p $EXECUTION_OUTPUT_DIR
+
+echo === Compilation:
+
+SOURCES_ARR=($SOURCES)
+for SOURCE_PATH in "${SOURCES_ARR[@]}"; do
+  echo "- compile $SOURCE_PATH"
+  SOURCE_NAME=$(basename "$SOURCE_PATH")
+  mkdir $COMPILATION_OUTPUT_DIR/$SOURCE_NAME
+  echo  ${BUILD_DIR}/tools/araneae/araneae $SOURCE_PATH $SOURCE_NAME $COMPILATION_OUTPUT_DIR
+  ${BUILD_DIR}/tools/araneae/araneae $SOURCE_PATH $SOURCE_NAME $COMPILATION_OUTPUT_DIR
+done 
+
+echo === Execute with interactive io:
+
+for ASM in $COMPILATION_OUTPUT_DIR/**/*.s; do
+  echo $ASM
+  # ASM_FILES=("${ASM_FILES[@]}" "$file")
+done
+

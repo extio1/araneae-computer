@@ -1,0 +1,55 @@
+method readChar();
+method writeChar();
+
+method readInt()
+begin
+  Digit := 0;
+  Res := 0;
+  
+  Digit := readChar();
+  
+  repeat
+  begin
+    Res := (Res * 10) + (Digit - 48);
+    Digit := readChar();
+  end;
+  while Digit != '\n';
+  
+  ret Res;
+end;
+
+method printInt(Value)
+begin
+  Divider := 1;
+
+  Tmp := Value;
+  while Tmp >= 10; do
+  begin
+    Divider := Divider * 10;
+    Tmp := Tmp / 10;
+  end;
+
+  while Divider > 0; do
+  begin
+    Symbol := (Value / Divider) + 48;
+    writeChar(Symbol);
+    Value := Value % Divider;
+    Divider := Divider / 10;
+  end;
+
+  writeChar('\n');
+  ret;
+end;
+
+method main()
+begin
+  A := readChar();
+  readChar();
+  writeChar(A);
+  writeChar('\n');
+
+  B := readInt();
+  printInt(B);
+
+  ret;
+end;

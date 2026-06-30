@@ -1,0 +1,4 @@
+method func8 (V)
+begin
+	R := A + B + C;
+end;

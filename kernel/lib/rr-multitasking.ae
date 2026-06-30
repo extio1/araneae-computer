@@ -1,0 +1,175 @@
+class Task
+  // Fields:
+  //  @context - reference to array holding saved thread state (14 slots of 8 bytes)
+  //  @state - state of the thread, can be one of:
+  //         0: NEW (just created, never executed)
+  //         1: RUNNABLE (was interrupted, has saved context)
+  //         2: RUNNING (currently executing)
+  //         3: TERMINATED (finished execution)
+  var context;
+      state;
+begin
+  public method Task() 
+  begin 
+    this.context := Array[14];
+    this.state := 0;  // NEW
+  end;
+
+  public method getState() 
+  begin 
+    ret this.state;
+  end;
+
+  public method setState(newState) 
+  begin 
+    this.state := newState;
+  end;
+
+  public method __save_context();
+  public method __restore_context();
+  public method __run_on_own_stack();
+end;
+
+class RRScheduler
+  var tasks;
+      currentTaskIndex;
+      taskCounter;
+      maxTaskCounter;
+begin
+  public method RRScheduler() 
+  begin 
+    this.tasks := Array[8];
+    this.taskCounter := 0;
+    this.maxTaskCounter := 8;
+    this.currentTaskIndex := 0;
+  end;
+
+  public method schedule(newTask)
+  begin
+    this.tasks[this.taskCounter] := newTask;
+    this.taskCounter := this.taskCounter + 1;
+  end;
+
+  public method execute()
+  begin
+    keepRunning := true;
+    while keepRunning; do
+    begin
+      found := false;
+      noReadyTasks := false;
+      startIndex := this.currentTaskIndex;
+      nextIndex := startIndex;
+
+      while !found; do
+      begin
+        nextIndex := nextIndex + 1;
+        if nextIndex >= this.taskCounter; then
+        begin
+          nextIndex := 0;
+        end;
+
+        nextTask := this.tasks[nextIndex];
+        state := nextTask.getState();
+
+        if state == 0 || state == 1; then
+        begin
+          found := true;
+          this.currentTaskIndex := nextIndex;
+        end;
+      end;
+
+      currentTask := this.tasks[this.currentTaskIndex];
+      state := currentTask.getState();
+
+      if state == 0; then
+      begin
+        currentTask.setState(2);
+        currentTask.__run_on_own_stack();
+      end;
+
+      state := currentTask.getState();
+      if state == 1; then
+      begin
+        currentTask.setState(2);
+        currentTask.__restore_context();
+      end;
+    end;
+  end;
+
+  public method getCurrentTask()
+  begin
+    ret this.tasks[this.currentTaskIndex];
+  end;
+end;
+
+class Task1 : Task
+  var someTask1Field;
+begin
+  public method Task1() 
+  begin 
+    this.someTask1Field := 1;
+  end;
+
+  public method run()
+  begin
+    i := 0;
+    while i < 10; do
+    begin
+      printInt(this.someTask1Field);
+      i := i + 1;
+    end;
+  end;
+end;
+
+class Task2 : Task
+  var someTask2Field;
+begin
+  public method Task2() 
+  begin 
+    this.someTask2Field := 2;
+  end;
+
+  public method run()
+  begin
+    i := 0;
+    while i < 10; do
+    begin
+      printInt(this.someTask2Field);
+      i := i + 1;
+    end;
+  end;
+end;
+
+class Task3 : Task
+  var someTask3Field;
+begin
+  public method Task3()
+  begin
+    this.someTask3Field := 3;
+  end;
+
+  public method run()
+  begin
+    i := 0;
+    while i < 10; do
+    begin
+      printInt(this.someTask3Field);
+      i := i + 1;
+    end;
+  end;
+end;
+
+method main()
+begin
+  scheduler := RRScheduler();
+  __save_scheduler_ref(scheduler);
+  T1 := Task1();
+  T2 := Task2();
+  T3 := Task3();
+
+  scheduler.schedule(T1);
+  scheduler.schedule(T2);
+  scheduler.schedule(T3);
+
+  scheduler.execute();
+end;

@@ -1,0 +1,105 @@
+[section code]
+start:
+	reset
+	call main
+	hlt
+
+readInt:
+	usp 16
+.entry0:
+	br .entry1
+.entry1:
+	mv fp[8], 0b0000010100000000000000010000000000000000000000000000000000000000
+	mv fp[16], 0b0000010100000000000000010000000000000000000000000000000000000000
+	call readChar
+	mv fp[8], rr
+	br .doWhileBody2
+.doWhileBody2:
+	br .entry5
+.entry5:
+	mul r0, fp[16], 0b0000010100000000000000010000000000000000000000000000000000001010
+	sub r1, fp[8], 0b0000010100000000000000010000000000000000000000000000000000110000
+	add r2, r0, r1
+	mv fp[16], r2
+	call readChar
+	mv fp[8], rr
+	br .doWhileCond3
+.doWhileFallthrough4:
+	br .ret6
+.ret6:
+	mv rr, fp[16]
+	ret
+.doWhileCond3:
+	neq r0, fp[8], 0b0000011100000000000000010000000000000000000000000000000000001010
+	br r0, .doWhileBody2, .doWhileFallthrough4
+
+printInt:
+	usp 24
+.entry7:
+	br .entry8
+.entry8:
+	mv fp[8], 0b0000010100000000000000010000000000000000000000000000000000000001
+	mv fp[16], r0
+	br .whileCond9
+.whileCond9:
+	gte r1, fp[16], 0b0000010100000000000000010000000000000000000000000000000000001010
+	br r1, .whileBody10, .whileFallthrough11
+.whileBody10:
+	br .entry12
+.entry12:
+	mul r1, fp[8], 0b0000010100000000000000010000000000000000000000000000000000001010
+	mv fp[8], r1
+	div r1, fp[16], 0b0000010100000000000000010000000000000000000000000000000000001010
+	mv fp[16], r1
+	br .whileCond9
+.whileFallthrough11:
+	br .whileCond13
+.whileCond13:
+	gt r1, fp[8], 0b0000010100000000000000010000000000000000000000000000000000000000
+	br r1, .whileBody14, .whileFallthrough15
+.whileBody14:
+	br .entry16
+.entry16:
+	div r1, r0, fp[8]
+	add r2, r1, 0b0000010100000000000000010000000000000000000000000000000000110000
+	mv fp[24], r2
+	push r0
+	mv r0, fp[24]
+	call writeChar
+	pop r0
+	mod r1, r0, fp[8]
+	mv r0, r1
+	div r1, fp[8], 0b0000010100000000000000010000000000000000000000000000000000001010
+	mv fp[8], r1
+	br .whileCond13
+.whileFallthrough15:
+	push r0
+	st r0, 0b0000011100000000000000010000000000000000000000000000000000001010
+	call writeChar
+	pop r0
+	br .ret17
+.ret17:
+	mv rr, rr
+	ret
+
+main:
+	usp 16
+.entry18:
+	br .entry19
+.entry19:
+	call readChar
+	mv fp[8], rr
+	call readChar
+	mv r0, fp[8]
+	call writeChar
+	st r0, 0b0000011100000000000000010000000000000000000000000000000000001010
+	call writeChar
+	call readInt
+	mv fp[16], rr
+	mv r0, fp[16]
+	call printInt
+	br .ret20
+.ret20:
+	mv rr, rr
+	ret
+

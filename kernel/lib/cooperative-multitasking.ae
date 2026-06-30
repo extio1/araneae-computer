@@ -1,0 +1,86 @@
+class Task
+  var state;
+begin
+  public method Task() 
+  begin 
+    this.state := Array[14];
+  end;
+end;
+
+class CooperativeScheduler
+  var tasks;
+      taskCounter;
+begin
+  public method CooperativeScheduler() 
+  begin 
+    this.tasks := Array[8];
+    this.taskCounter := 0;
+  end;
+
+  public method schedule(newTask)
+  begin
+    this.tasks[this.taskCounter] := newTask;
+    this.taskCounter := this.taskCounter + 1;
+  end;
+
+  public method execute()
+  begin
+    i := 0;
+    while i < this.taskCounter; do
+    begin
+      task := this.tasks[i];
+      task.run();
+      i := i + 1;
+    end;
+  end;
+end;
+
+class Task1 : Task
+  var someTask1Field;
+begin
+  public method Task1() 
+  begin 
+    this.someTask1Field := 1;
+  end;
+
+  public method run()
+  begin
+    i := 0;
+    while i < 10; do
+    begin
+      printInt(this.someTask1Field);
+      i := i + 1;
+    end;
+  end;
+end;
+
+class Task2 : Task
+  var someTask2Field;
+begin
+  public method Task2() 
+  begin 
+    this.someTask2Field := 2;
+  end;
+
+  public method run()
+  begin
+    i := 0;
+    while i < 10; do
+    begin
+      printInt(this.someTask2Field);
+      i := i + 1;
+    end;
+  end;
+end;
+
+method main()
+begin
+  scheduler := CooperativeScheduler();
+  T1 := Task1();
+  T2 := Task2();
+
+  scheduler.schedule(T2);
+  scheduler.schedule(T1);
+
+  scheduler.execute();
+end;

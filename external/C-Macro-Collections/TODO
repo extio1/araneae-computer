@@ -1,0 +1,104 @@
+TODO
+
+Patch - Changes that can be released by a patch version
+Minor - Changes that require a bit more time than a simple patch
+Major - 1.0.0 version or breaking changes
+
+The library follows https://semver.org/
+Check out CHANGELOG
+
+[/] - In Progress
+[X] - Finished
+
+
+#!! Next Patch -----------------------------------------------------------------
+
+
+
+#!! Major ----------------------------------------------------------------------
+
+[ ] Stabilize the library
+[ ] Add SAC library
+[ ] Add TSC library
+[ ] Separate inner Data Structure implementation from the Collection's one
+[ ] CMC_NAMES - Full customization of function names (see CMC_CAMEL_CASE)
+[\] Tests
+[\] Documentation
+
+
+#!! Minor ----------------------------------------------------------------------
+
+[ ] Fix BitSet, using capacity vs. counter
+[ ] #13 - Properly implement HashBidiMap iterator
+[ ] More SortedList functions
+[ ] BidiMap's _is_mapping() to check if a mapping K <=> V exists
+[ ] New asserts - _array_int(), _array_not_in() and str
+[ ] Add Stack's _peek() and _top() (get by value, get by pointer)
+[ ] CMC_TIMED for timed blocks
+[ ] _iter_at() iterator
+
+
+#!! Patch ----------------------------------------------------------------------
+
+[ ] MultiSets replace existing value with the new added one
+
+
+#!! Considerations -------------------------------------------------------------
+
+[ ] rand.h utility
+[ ] Redo `while (true)` in hashtables' _insert()
+[ ] Add to_array and from_array functions
+[ ] Serialization
+    [ ] save         {all}
+    [ ] load         {all}
+    [ ] serialize    {all}
+    [ ] deserialize  {all}
+[ ] Zip Iterators
+[ ] Consumer Iterators
+
+
+#!! Optimizations --------------------------------------------------------------
+
+[ ] Use binary search to find optimum hashtable prime size inside
+    impl_calculate_size
+
+
+#!! Done -----------------------------------------------------------------------
+
+[X] Remove PUBLIC and PRIVATE
+[X] Utility
+    [X] assert.h
+    [X] foreach.h
+    [X] log.h
+    [X] test.h
+    [X] timer.h
+[X] Extra Collections
+    [X] Add MultiSet
+    [X] Add MultiMap
+    [X] Add IntervalHeap
+    [X] Add SortedList
+    [X] Add BidiMap
+[X] Add functions
+    [X] update       {hashmap, treemap, multimap}
+    [X] set          {hashmap, treemap, multimap}
+    [X] to_string    {all}
+    [X] iter_advance {all} (iterators)
+    [X] iter_rewind  {all} (iterators)
+    [X] iter_go_to   {all} (iterators)
+    [X] equals       {all}
+    [X] copy_of      {all}
+    [X] resize       {array based collections}
+[X] Custom allocators
+[X] Each file needs to be independent without including external files
+[X] Fix cases where new_custom() should be used instead of just new()
+[X] Add Function Tables that contains data type functions
+    (compare, copy, display, free, hash, priority)
+[X] Add error codes that can be accessed from the collection's struct
+[X] Merge bidirectional map key_buffer and val_buffer to a single buffer and make key_dist and val_dist into dist[2]
+[X] Callback utility
+    on_create, on_read, on_update, on_delete, on_resize
+[X] Replace IntervalHeap node by a simple buffer of two pointers (V (*buffer)[2])
+[X] PUBLIC and PRIVATE is back (opaque data structures)
+[X] Add EXT library
+[X] #12 - Fix the collections that depend on ITER
+[X] #10 - Fix Benchmarks and Examples

@@ -1,0 +1,1626 @@
+#include "araneae/abi/Types.h"
+#include "araneae/abi/Reference.h"
+
+/*
+ * Error handling
+ */
+#define ErrorHandlerAddress       0x42424242
+#define ErrorCodeBadReference         0x0001
+#define ErrorCodeWrongOpTypes         0x0002
+#define ErrorCodeWrongStringLocation  0x0003
+#define ErrorCodeUnimplemented        0x0004
+#define ErrorCodeUnknownType          0x0005
+#define ErrorCodeArithmeticOverflow   0x0006
+#define ErrorCodeDivisionByZero       0x0007
+/* ... */
+#define ErrorCodeLast                 0xffff
+/* Reserved for the future*/
+#define RaiseError(ErrorCode) { ip = ErrorHandlerAddress; io = ((__LINE__ << 16) | ErrorCode); }
+
+#define GET_REFS_OPERAND1(op)                                                                           \
+  let opRef = op;                                                                                       \
+  when stackOffset then {                                                                               \
+    let addr = fp - op;                                                                                 \
+    READ_FROM_ADDR(addr, TYPE_ULONG, opRef)                                                             \
+  }
+#define GET_REFS_DSTOPERAND1(op1, op2)                                                                  \
+  let op1Ref = op1;                                                                                     \
+  let op2Ref = op2;                                                                                     \
+  when reg-stack then {                                                                                 \
+    let addr = fp - op2;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op2Ref)                                                            \
+  }                                                                                                     \
+  when stack-imm then {                                                                                 \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when stack-reg then {                                                                                 \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when stack-stack then {                                                                               \
+    let addr1 = fp - op1;                                                                               \
+    let addr2 = fp - op2;                                                                               \
+    READ_FROM_ADDR(addr1, TYPE_ULONG, op1Ref)                                                           \
+    READ_FROM_ADDR(addr2, TYPE_ULONG, op2Ref)                                                           \
+  }
+#define GET_REFS_DSTOPERAND2(op1, op2, op3)                                                             \
+  let op1Ref = op1;                                                                                     \
+  let op2Ref = op2;                                                                                     \
+  let op3Ref = op3;                                                                                     \
+  when stack-imm-imm then {                                                                             \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when stack-imm-reg then {                                                                             \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when stack-reg-imm then {                                                                             \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when stack-reg-reg then {                                                                             \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when reg-imm-stack then {                                                                             \
+    let addr = fp - op3;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op3Ref)                                                            \
+  }                                                                                                     \
+  when reg-reg-stack then {                                                                             \
+    let addr = fp - op3;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op3Ref)                                                            \
+  }                                                                                                     \
+  when reg-stack-imm then {                                                                             \
+    let addr = fp - op2;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op2Ref)                                                            \
+  }                                                                                                     \
+  when reg-stack-reg then {                                                                             \
+    let addr = fp - op2;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op2Ref)                                                            \
+  }                                                                                                     \
+  when reg-stack-stack then {                                                                           \
+    let addr1 = fp - op2;                                                                               \
+    let addr2 = fp - op3;                                                                               \
+    READ_FROM_ADDR(addr1, TYPE_ULONG, op2Ref)                                                           \
+    READ_FROM_ADDR(addr2, TYPE_ULONG, op3Ref)                                                           \
+  }                                                                                                     \
+  when stack-imm-stack then {                                                                           \
+    let addr1 = fp - op1;                                                                               \
+    let addr2 = fp - op3;                                                                               \
+    READ_FROM_ADDR(addr1, TYPE_ULONG, op1Ref)                                                           \
+    READ_FROM_ADDR(addr2, TYPE_ULONG, op3Ref)                                                           \
+  }                                                                                                     \
+  when stack-reg-stack then {                                                                           \
+    let addr1 = fp - op1;                                                                               \
+    let addr2 = fp - op3;                                                                               \
+    READ_FROM_ADDR(fp - op1, TYPE_ULONG, op1Ref)                                                        \
+    READ_FROM_ADDR(fp - op3, TYPE_ULONG, op3Ref)                                                        \
+  }                                                                                                     \
+  when stack-stack-imm then {                                                                           \
+    let addr1 = fp - op1;                                                                               \
+    let addr2 = fp - op2;                                                                               \
+    READ_FROM_ADDR(addr1, TYPE_ULONG, op1Ref)                                                           \
+    READ_FROM_ADDR(addr2, TYPE_ULONG, op2Ref)                                                           \
+  }                                                                                                     \
+  when stack-stack-reg then {                                                                           \
+    let addr1 = fp - op1;                                                                               \
+    let addr2 = fp - op2;                                                                               \
+    READ_FROM_ADDR(addr1, TYPE_ULONG, op1Ref)                                                           \
+    READ_FROM_ADDR(addr2, TYPE_ULONG, op2Ref)                                                           \
+  }                                                                                                     \
+  when stack-stack-stack then {                                                                         \
+    let addr1 = fp - op1;                                                                               \
+    let addr2 = fp - op2;                                                                               \
+    let addr3 = fp - op3;                                                                               \
+    READ_FROM_ADDR(addr1, TYPE_ULONG, op1Ref)                                                           \
+    READ_FROM_ADDR(addr2, TYPE_ULONG, op2Ref)                                                           \
+    READ_FROM_ADDR(addr3, TYPE_ULONG, op3Ref)                                                           \
+  }
+#define GET_REFS_OPERAND2(op1, op2)                                                                     \
+  let op1Ref = op1;                                                                                     \
+  let op2Ref = op2;                                                                                     \
+  when imm-stack then {                                                                                 \
+    let addr = fp - op2;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op2Ref)                                                            \
+  }                                                                                                     \
+  when reg-stack then {                                                                                 \
+    let addr = fp - op2;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op2Ref)                                                            \
+  }                                                                                                     \
+  when stack-reg then {                                                                                 \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when stack-imm then {                                                                                 \
+    let addr = fp - op1;                                                                                \
+    READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)                                                            \
+  }                                                                                                     \
+  when stack-stack then {                                                                               \
+    let addr1 = fp - op1;                                                                               \
+    let addr2 = fp - op2;                                                                               \
+    READ_FROM_ADDR(addr1, TYPE_ULONG, op1Ref)                                                           \
+    READ_FROM_ADDR(addr2, TYPE_ULONG, op2Ref)                                                           \
+  }
+
+/*
+ * IP updating
+ */
+#define UPDATE_IP(l) ip = ip + l;
+#define UPDATE_IP_REG_OPERAND_IMM(s)                                                                    \
+  when reg-reg-imm then                                                                                 \
+    ip = ip + s + 1 + 1 + 1 + 8;                                                                        \
+  when reg-imm-imm then                                                                                 \
+    ip = ip + s + 1 + 1 + 8 + 8;                                                                        \
+  when reg-stack-imm then                                                                               \
+    ip = ip + s + 1 + 1 + 2 + 8;
+    
+#define UPDATE_IP_OPERAND3(s)                                                                             \
+  when imm-imm-imm then                                                                                   \
+    ip = ip + s + 1 + 3*8 + 0*1 + 0*2;                                                                    \
+  when imm-imm-reg then                                                                                   \
+    ip = ip + s + 1 + 2*8 + 1*1 + 0*2;                                                                    \
+  when imm-imm-stack then                                                                                 \
+    ip = ip + s + 1 + 2*8 + 0*1 + 1*2;                                                                    \
+  when imm-reg-imm then                                                                                   \
+    ip = ip + s + 1 + 2*8 + 1*1 + 0*2;                                                                    \
+  when imm-reg-reg then                                                                                   \
+    ip = ip + s + 1 + 1*8 + 2*1 + 0*2;                                                                    \
+  when imm-reg-stack then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when imm-stack-imm then                                                                                 \
+    ip = ip + s + 1 + 2*8 + 0*1 + 1*2;                                                                    \
+  when imm-stack-reg then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when imm-stack-stack then                                                                               \
+    ip = ip + s + 1 + 1*8 + 0*1 + 2*2;                                                                    \
+  when reg-imm-imm then                                                                                   \
+    ip = ip + s + 1 + 2*8 + 1*1 + 0*2;                                                                    \
+  when reg-imm-reg then                                                                                   \
+    ip = ip + s + 1 + 1*8 + 2*1 + 0*2;                                                                    \
+  when reg-imm-stack then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when reg-reg-imm then                                                                                   \
+    ip = ip + s + 1 + 1*8 + 2*1 + 0*2;                                                                    \
+  when reg-reg-reg then                                                                                   \
+    ip = ip + s + 1 + 0*8 + 3*1 + 0*2;                                                                    \
+  when reg-reg-stack then                                                                                 \
+    ip = ip + s + 1 + 0*8 + 2*1 + 1*2;                                                                    \
+  when reg-stack-imm then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when reg-stack-reg then                                                                                 \
+    ip = ip + s + 1 + 0*8 + 2*1 + 1*2;                                                                    \
+  when reg-stack-stack then                                                                               \
+    ip = ip + s + 1 + 0*8 + 1*1 + 2*2;                                                                    \
+  when stack-imm-imm then                                                                                 \
+    ip = ip + s + 1 + 2*8 + 0*1 + 1*2;                                                                    \
+  when stack-imm-reg then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when stack-imm-stack then                                                                               \
+    ip = ip + s + 1 + 1*8 + 0*1 + 2*2;                                                                    \
+  when stack-reg-imm then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when stack-reg-reg then                                                                                 \
+    ip = ip + s + 1 + 0*8 + 2*1 + 1*2;                                                                    \
+  when stack-reg-stack then                                                                               \
+    ip = ip + s + 1 + 0*8 + 1*1 + 2*2;                                                                    \
+  when stack-stack-imm then                                                                               \
+    ip = ip + s + 1 + 1*8 + 0*1 + 2*2;                                                                    \
+  when stack-stack-reg then                                                                               \
+    ip = ip + s + 1 + 0*8 + 1*1 + 2*2;                                                                    \
+  when stack-stack-stack then                                                                             \
+    ip = ip + s + 1 + 0*8 + 0*1 + 3*2;
+#define UPDATE_IP_OPERAND2(s)                                                                             \
+  when imm-imm then                                                                                       \
+    ip = ip + s + 1 + 2*8 + 0*1 + 0*2;                                                                    \
+  when imm-reg then                                                                                       \
+    ip = ip + s + 1 + 1*8 + 1*1 + 0*2;                                                                    \
+  when imm-stack then                                                                                     \
+    ip = ip + s + 1 + 1*8 + 0*1 + 1*2;                                                                    \
+  when reg-imm then                                                                                       \
+    ip = ip + s + 1 + 1*8 + 1*1 + 0*2;                                                                    \
+  when reg-reg then                                                                                       \
+    ip = ip + s + 1 + 0*8 + 2*1 + 0*2;                                                                    \
+  when reg-stack then                                                                                     \
+    ip = ip + s + 1 + 0*8 + 1*1 + 1*2;                                                                    \
+  when stack-imm then                                                                                     \
+    ip = ip + s + 1 + 1*8 + 0*1 + 1*2;                                                                    \
+  when stack-reg then                                                                                     \
+    ip = ip + s + 1 + 0*8 + 1*1 + 1*2;                                                                    \
+  when stack-stack then                                                                                   \
+    ip = ip + s + 1 + 0*8 + 0*1 + 2*2;
+#define UPDATE_IP_OPERAND1(s)                                                                             \
+  when imm then                                                                                           \
+    ip = ip + s + 1 + 1*8 + 0*1 + 0*2;                                                                    \
+  when reg then                                                                                           \
+    ip = ip + s + 1 + 0*8 + 1*1 + 0*2;                                                                    \
+  when stackOffset then                                                                                   \
+    ip = ip + s + 1 + 0*8 + 0*1 + 1*2;
+#define UPDATE_IP_DSTOPERAND2(s)                                                                          \
+  when reg-imm-imm then                                                                                   \
+    ip = ip + s + 1 + 2*8 + 1*1 + 0*2;                                                                    \
+  when reg-imm-reg then                                                                                   \
+    ip = ip + s + 1 + 1*8 + 2*1 + 0*2;                                                                    \
+  when reg-imm-stack then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when reg-reg-imm then                                                                                   \
+    ip = ip + s + 1 + 1*8 + 2*1 + 0*2;                                                                    \
+  when reg-reg-reg then                                                                                   \
+    ip = ip + s + 1 + 0*8 + 3*1 + 0*2;                                                                    \
+  when reg-reg-stack then                                                                                 \
+    ip = ip + s + 1 + 0*8 + 2*1 + 1*2;                                                                    \
+  when reg-stack-imm then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when reg-stack-reg then                                                                                 \
+    ip = ip + s + 1 + 0*8 + 2*1 + 1*2;                                                                    \
+  when reg-stack-stack then                                                                               \
+    ip = ip + s + 1 + 0*8 + 1*1 + 2*2;                                                                    \
+  when stack-imm-imm then                                                                                 \
+    ip = ip + s + 1 + 2*8 + 0*1 + 1*2;                                                                    \
+  when stack-imm-reg then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when stack-imm-stack then                                                                               \
+    ip = ip + s + 1 + 1*8 + 0*1 + 2*2;                                                                    \
+  when stack-reg-imm then                                                                                 \
+    ip = ip + s + 1 + 1*8 + 1*1 + 1*2;                                                                    \
+  when stack-reg-reg then                                                                                 \
+    ip = ip + s + 1 + 0*8 + 2*1 + 1*2;                                                                    \
+  when stack-reg-stack then                                                                               \
+    ip = ip + s + 1 + 0*8 + 1*1 + 2*2;                                                                    \
+  when stack-stack-imm then                                                                               \
+    ip = ip + s + 1 + 1*8 + 0*1 + 2*2;                                                                    \
+  when stack-stack-reg then                                                                               \
+    ip = ip + s + 1 + 0*8 + 1*1 + 2*2;                                                                    \
+  when stack-stack-stack then                                                                             \
+    ip = ip + s + 1 + 0*8 + 0*1 + 3*2;
+#define UPDATE_IP_DSTOPERAND1(s)                                                                          \
+  when reg-imm then                                                                                       \
+    ip = ip + s + 1 + 1*8 + 1*1 + 0*2;                                                                    \
+  when reg-reg then                                                                                       \
+    ip = ip + s + 1 + 0*8 + 2*1 + 0*2;                                                                    \
+  when reg-stack then                                                                                     \
+    ip = ip + s + 1 + 0*8 + 1*1 + 1*2;                                                                    \
+  when stack-imm then                                                                                     \
+    ip = ip + s + 1 + 1*8 + 0*1 + 1*2;                                                                    \
+  when stack-reg then                                                                                     \
+    ip = ip + s + 1 + 0*8 + 1*1 + 1*2;                                                                    \
+  when stack-stack then                                                                                   \
+    ip = ip + s + 1 + 0*8 + 0*1 + 2*2;
+
+#define WRITE_OPERAND2(dst, value, type)                                                                  \
+  when imm-imm then {                                                                                     \
+    WRITE_TO_ADDR(dst, value, type)                                                                       \
+  }                                                                                                       \
+  when imm-reg then {                                                                                     \
+    WRITE_TO_ADDR(dst, value, type)                                                                       \
+  }                                                                                                       \
+  when imm-stack then {                                                                                   \
+    WRITE_TO_ADDR(dst, value, type)                                                                       \
+  }                                                                                                       \
+  when reg-imm then {                                                                                     \
+    dst = value;                                                                                          \
+  }                                                                                                       \
+  when reg-reg then {                                                                                     \
+    dst = value;                                                                                          \
+  }                                                                                                       \
+  when reg-stack then {                                                                                   \
+    dst = value;                                                                                          \
+  }                                                                                                       \
+  when stack-imm then {                                                                                   \
+    let addr = fp - dst;                                                                                  \
+    WRITE_TO_ADDR(addr, value, type)                                                                      \
+  }                                                                                                       \
+  when stack-reg then {                                                                                   \
+    let addr = fp - dst;                                                                                  \
+    WRITE_TO_ADDR(addr, value, type)                                                                      \
+  }                                                                                                       \
+  when stack-stack then {                                                                                 \
+    let addr = fp - dst;                                                                                  \
+    WRITE_TO_ADDR(addr, value, type)                                                                      \
+  }
+#define WRITE_DSTOPERAND1(dst, value, type)                                                               \
+  when reg-imm then {                                                                                     \
+    dst = value;                                                                                          \
+  }                                                                                                       \
+  when reg-reg then {                                                                                     \
+    dst = value;                                                                                          \
+  }                                                                                                       \
+  when reg-stack then {                                                                                   \
+    dst = value;                                                                                          \
+  }                                                                                                       \
+  when stack-imm then {                                                                                   \
+    let addr = fp - dst;                                                                                  \
+    WRITE_TO_ADDR(addr, value, type)                                                                      \
+  }                                                                                                       \
+  when stack-reg then {                                                                                   \
+    let addr = fp - dst;                                                                                  \
+    WRITE_TO_ADDR(addr, value, type)                                                                      \
+  }                                                                                                       \
+  when stack-stack then {                                                                                 \
+    let addr = fp - dst;                                                                                  \
+    WRITE_TO_ADDR(addr, value, type)                                                                      \
+  }
+#define WRITE_DSTOPERAND2(dst, value, type)                                                             \
+  when reg-imm-imm then {                                                                               \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-imm-reg then {                                                                               \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-imm-stack then {                                                                             \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-reg-imm then {                                                                               \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-reg-reg then {                                                                               \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-reg-stack then {                                                                             \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-stack-imm then {                                                                             \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-stack-reg then {                                                                             \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when reg-stack-stack then {                                                                           \
+    dst = value;                                                                                        \
+  }                                                                                                     \
+  when stack-imm-imm then {                                                                             \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }                                                                                                     \
+  when stack-imm-reg then {                                                                             \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(fp - dst, value, type)                                                                \
+  }                                                                                                     \
+  when stack-imm-stack then {                                                                           \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }                                                                                                     \
+  when stack-reg-imm then {                                                                             \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }                                                                                                     \
+  when stack-reg-reg then {                                                                             \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }                                                                                                     \
+  when stack-reg-stack then {                                                                           \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }                                                                                                     \
+  when stack-stack-imm then {                                                                           \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }                                                                                                     \
+  when stack-stack-reg then {                                                                           \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }                                                                                                     \
+  when stack-stack-stack then {                                                                         \
+    let addr = fp - dst;                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                    \
+  }
+
+#define SIZE_OF(type, sizeVar)                                                                          \
+  let sizeVar = 0;                                                                                      \
+  if (type == TYPE_BOOL) then                                                                           \
+    sizeVar = 1;                                                                                        \
+  else if (type == TYPE_BYTE) then                                                                      \
+    sizeVar = 1;                                                                                        \
+  else if (type == TYPE_INT) then                                                                       \
+    sizeVar = 4;                                                                                        \
+  else if (type == TYPE_UINT) then                                                                      \
+    sizeVar = 4;                                                                                        \
+  else if (type == TYPE_LONG) then                                                                      \
+    sizeVar = 8;                                                                                        \
+  else if (type == TYPE_ULONG) then                                                                     \
+    sizeVar = 8;                                                                                        \
+  else if (type == TYPE_CHAR) then                                                                      \
+    sizeVar = 1;                                                                                        \
+  else                                                                                                  \
+    RaiseError(ErrorCodeUnknownType)                                                                    \
+
+#define MakeRef(type, flags, payload) MakeRefInternal(,type, flags, payload)
+/* 
+ * READ/WRITE references
+ */
+/* Get offset in datas bank */
+#define GET_ADDRESS(ref, addr)                                                                           \
+  let addr = 0;                                                                                          \
+  if (IsImmediate(ref)) then {                                                                           \
+    RaiseError(ErrorCodeBadReference)                                                                    \
+  } else if (IsStackOffset(ref)) then {                                                                  \
+    addr = fp - GetPayload(ref);                                                                         \
+  } else if (IsHeapOffset(ref)) then {                                                                   \
+    addr = hp + GetPayload(ref);                                                                         \
+  } else if (IsGlobalOffset(ref)) then {                                                                 \
+    addr = GetPayload(ref);                                                                              \
+  } else {                                                                                               \
+    RaiseError(ErrorCodeBadReference)                                                                    \
+  }
+#define READ_1BIT(addr, value)                                                                           \
+  value = datas[addr] & 0x01;
+#define READ_1BYTE(addr, value)                                                                          \
+  value = datas[addr] & 0xFF;
+#define READ_4BYTE_SIGNED(addr, value)                                                                   \
+  let raw = datas[addr] | (datas[addr + 1] << 8) |                                                       \
+            (datas[addr + 2] << 16) | (datas[addr + 3] << 24);                                           \
+  if (raw & 0x80000000) then                                                                             \
+    value = raw | 0xFFFFFFFF00000000;                                                                    \
+  else                                                                                                   \
+    value = raw;
+#define READ_4BYTE_UNSIGNED(addr, value)                                                                 \
+  value = datas[addr] | (datas[addr + 1] << 8) |                                                         \
+          (datas[addr + 2] << 16) | (datas[addr + 3] << 24);
+#define READ_8BYTE(addr, value)                                                                          \
+  value = datas[addr] | (datas[addr + 1] << 8) |                                                         \
+          (datas[addr + 2] << 16) | (datas[addr + 3] << 24) |                                            \
+          (datas[addr + 4] << 32) | (datas[addr + 5] << 40) |                                            \
+          (datas[addr + 6] << 48) | (datas[addr + 7] << 56);
+#define READ_FROM_ADDR(addr, type, value)                                                                \
+  if (type == TYPE_BOOL) then {                                                                          \
+    READ_1BIT(addr, value)                                                                               \
+  } else if (type == TYPE_BYTE) then {                                                                   \
+    READ_1BYTE(addr, value)                                                                              \
+  } else if (type == TYPE_CHAR) then {                                                                   \
+    READ_1BYTE(addr, value)                                                                              \
+  } else if (type == TYPE_INT) then {                                                                    \
+    READ_4BYTE_SIGNED(addr, value)                                                                       \
+  } else if (type == TYPE_UINT) then {                                                                   \
+    READ_4BYTE_UNSIGNED(addr, value)                                                                     \
+  } else if (type == TYPE_LONG || type == TYPE_ULONG) then {                                             \
+    READ_8BYTE(addr, value)                                                                              \
+  } else if (type == TYPE_STRING) then {                                                                 \
+    READ_8BYTE(addr, value)                                                                              \
+  } else {                                                                                               \
+    RaiseError(ErrorCodeWrongOpTypes)                                                                    \
+  }
+/* Type dependent read from reference to "value" variable */
+#define READ(ref, value)                                                                                 \
+  let value = 0;                                                                                         \
+  {                                                                                                      \
+  let ref##Type = GetType(ref);                                                                          \
+  let ref##IsImmediate = IsImmediate(ref);                                                               \
+                                                                                                         \
+  if (ref##IsImmediate) then {                                                                           \
+    let raw = GetPayload(ref);                                                                           \
+    if (ref##Type == TYPE_BOOL) then {                                                                   \
+      value = raw & 0x01;                                                                                \
+    } else if (ref##Type == TYPE_BYTE) then {                                                            \
+      value = raw & 0xFF;                                                                                \
+    } else if (ref##Type == TYPE_INT) then {                                                             \
+      if (raw & 0x80000000) then                                                                         \
+        value = raw | 0xFFFFFFFF00000000;                                                                \
+      else                                                                                               \
+        value = raw;                                                                                     \
+    } else if (ref##Type == TYPE_UINT) then {                                                            \
+      value = raw & 0xFFFFFFFF;                                                                          \
+    } else if (ref##Type == TYPE_LONG) then {                                                            \
+      value = raw;                                                                                       \
+    } else if (ref##Type == TYPE_ULONG) then {                                                           \
+      value = raw & 0xFFFFFFFFFFFFFFFF;                                                                  \
+    } else if (ref##Type == TYPE_CHAR) then {                                                            \
+      value = raw & 0xFF;                                                                                \
+    } else if (ref##Type == TYPE_STRING) then {                                                          \
+      value = raw & 0xFFFFFFFF;                                                                          \
+    } else                                                                                               \
+      RaiseError(ErrorCodeWrongOpTypes)                                                                  \
+  } else {                                                                                               \
+    GET_ADDRESS(ref, addr)                                                                               \
+    READ_FROM_ADDR(addr, ref##Type, value)                                                               \
+  }                                                                                                      \
+  }
+#define WRITE_1BIT(addr, value)                                                                          \
+  datas[addr] = value & 0x01;
+#define WRITE_1BYTE(addr, value)                                                                         \
+  datas[addr] = value & 0xFF;
+#define WRITE_4BYTE(addr, value)                                                                         \
+  datas[addr] = value & 0xFF;                                                                            \
+  datas[addr + 1] = (value >> 8) & 0xFF;                                                                 \
+  datas[addr + 2] = (value >> 16) & 0xFF;                                                                \
+  datas[addr + 3] = (value >> 24) & 0xFF;
+#define WRITE_8BYTE(addr, value)                                                                         \
+  datas[addr] = value & 0xFF;                                                                            \
+  datas[addr + 1] = (value >> 8) & 0xFF;                                                                 \
+  datas[addr + 2] = (value >> 16) & 0xFF;                                                                \
+  datas[addr + 3] = (value >> 24) & 0xFF;                                                                \
+  datas[addr + 4] = (value >> 32) & 0xFF;                                                                \
+  datas[addr + 5] = (value >> 40) & 0xFF;                                                                \
+  datas[addr + 6] = (value >> 48) & 0xFF;                                                                \
+  datas[addr + 7] = (value >> 56) & 0xFF;
+/* WRITE @value of @type to @addr in datas memory bank */
+#define WRITE_TO_ADDR(addr, value, type)                                                                 \
+  if (type == TYPE_BOOL) then {                                                                          \
+    WRITE_1BIT(addr, value)                                                                              \
+  } else if (type == TYPE_BYTE) then {                                                                   \
+    WRITE_1BYTE(addr, value)                                                                             \
+  } else if (type == TYPE_INT || type == TYPE_UINT) then {                                               \
+    WRITE_4BYTE(addr, value)                                                                             \
+  } else if (type == TYPE_LONG || type == TYPE_ULONG) then {                                             \
+    WRITE_8BYTE(addr, value)                                                                             \
+  } else if (type == TYPE_CHAR) then {                                                                   \
+    datas[addr] = value & 0xFF;                                                                          \
+  } else if (type == TYPE_STRING) then {                                                                 \
+    WRITE_8BYTE(addr, value)                                                                             \
+  } else {                                                                                               \
+    RaiseError(ErrorCodeWrongOpTypes)                                                                    \
+  }
+/* Writes to memory location in ref and store result reference to ref##ResultRef value */
+#define WRITE(ref, value, type)                                                                           \
+  let ref##IsImmediate = IsImmediate(ref);                                                                \
+  if (ref##IsImmediate) then {                                                                            \
+    RaiseError(ErrorCodeBadReference)                                                                     \
+  } else {                                                                                                \
+    GET_ADDRESS(ref, addr)                                                                                \
+    WRITE_TO_ADDR(addr, value, type)                                                                      \
+    let ref##ResultRef = ChangeTypeTo(ref, type);                                                         \
+  }
+
+/* Writes to the top of heap, update hp and return reference in ref##ResultRef value */
+#define WRITE_TO_HEAP(value, type)                                                                         \
+  WRITE_TO_ADDR(hp, value, type)                                                                           \
+  let value##ResultRef = MakeRef(type, F_GLOBAL, hp);                                                      \
+  SIZE_OF(type, typeSize)                                                                                  \
+  hp = hp + typeSize;
+
+/* Writes to the top of stack, update sp and return reference in ref##ResultRef value */
+#define WRITE_TO_STACK(value, type)                                                                       \
+  {                                                                                                       \
+  SIZE_OF(type, typeSize)                                                                                 \
+  sp = sp - typeSize;                                                                                     \
+  }                                                                                                       \
+  WRITE_TO_ADDR(sp, value, type)                                                                          \
+  let value##ResultRef = MakeRef(type, F_GLOBAL, sp);
+/* Reades from the stack, update sp and return reference in ref##ResultRef value */
+#define READ_FROM_STACK(value, type)                                                                      \
+  READ_FROM_ADDR(sp, type, value)                                                                         \
+  let value##ResultRef = MakeRef(type, F_GLOBAL, sp);                                                     \
+  {                                                                                                       \
+  SIZE_OF(type, typeSize)                                                                                 \
+  sp = sp + typeSize;                                                                                     \
+  }
+
+/*
+  
+src1/src2 BYTE  CHAR	INT	UINT	LONG	ULONG
+BYTE	    BYTE  INT	INT	INT	LONG	LONG
+CHAR	    INT CHAR	INT	INT	LONG	LONG
+INT	      INT INT	INT	INT	LONG	LONG
+UINT	    INT INT	INT	UINT	LONG	ULONG
+LONG	    LONG  LONG	LONG	LONG	LONG	LONG
+ULONG	    LONG  LONG	LONG	ULONG	LONG	ULONG
+*/
+#define MAKE_ARITH_BIN_OP(oper)                                                                            \
+  UPDATE_IP_DSTOPERAND2(1)                                                                                 \
+  GET_REFS_DSTOPERAND2(op1, op2, op3)                                                                      \
+  READ(op2Ref, src1Value)                                                                                  \
+  READ(op3Ref, src2Value)                                                                                  \
+  let src1Type = GetType(op2Ref);                                                                          \
+  let src2Type = GetType(op3Ref);                                                                          \
+  let resultType = src1Type;                                                                               \
+  if (src1Type != src2Type) then {                                                                         \
+    if (src1Type == TYPE_BYTE) then {                                                                      \
+      if (src2Type == TYPE_CHAR || src2Type == TYPE_INT || src2Type == TYPE_UINT) then                     \
+        resultType = TYPE_INT;                                                                             \
+      else if (src2Type == TYPE_LONG || src2Type == TYPE_ULONG) then                                       \
+        resultType = TYPE_LONG;                                                                            \
+      else                                                                                                 \
+        RaiseError(ErrorCodeWrongOpTypes)                                                                  \
+    } else if (src1Type == TYPE_CHAR) then {                                                               \
+      if (src2Type == TYPE_BYTE || src2Type == TYPE_INT || src2Type == TYPE_UINT) then                     \
+        resultType = TYPE_INT;                                                                             \
+      else if (src2Type == TYPE_LONG || src2Type == TYPE_ULONG) then                                       \
+        resultType = TYPE_LONG;                                                                            \
+      else                                                                                                 \
+        RaiseError(ErrorCodeWrongOpTypes)                                                                  \
+    } else if (src1Type == TYPE_INT) then {                                                                \
+      if (src2Type == TYPE_BYTE || src2Type == TYPE_CHAR || src2Type == TYPE_UINT) then                    \
+        resultType = TYPE_INT;                                                                             \
+      else if (src2Type == TYPE_LONG || src2Type == TYPE_ULONG) then                                       \
+        resultType = TYPE_LONG;                                                                            \
+      else                                                                                                 \
+        RaiseError(ErrorCodeWrongOpTypes)                                                                  \
+    } else if (src1Type == TYPE_UINT) then {                                                               \
+      if (src2Type == TYPE_BYTE || src2Type == TYPE_CHAR || src2Type == TYPE_INT) then                     \
+        resultType = TYPE_INT;                                                                             \
+      else if (src2Type == TYPE_LONG) then                                                                 \
+        resultType = TYPE_LONG;                                                                            \
+      else if (src2Type == TYPE_ULONG) then                                                                \
+        resultType = TYPE_ULONG;                                                                           \
+      else                                                                                                 \
+        RaiseError(ErrorCodeWrongOpTypes)                                                                  \
+    } else if (src1Type == TYPE_LONG) then {                                                               \
+      if (src2Type == TYPE_BYTE || src2Type == TYPE_CHAR || src2Type == TYPE_INT ||                        \
+          src2Type == TYPE_UINT || src2Type == TYPE_ULONG) then                                            \
+        resultType = TYPE_LONG;                                                                            \
+      else                                                                                                 \
+        RaiseError(ErrorCodeWrongOpTypes)                                                                  \
+    } else if (src1Type == TYPE_ULONG) then {                                                              \
+      if (src2Type == TYPE_BYTE || src2Type == TYPE_CHAR || src2Type == TYPE_INT) then                     \
+        resultType = TYPE_LONG;                                                                            \
+      else if (src2Type == TYPE_UINT || src2Type == TYPE_LONG) then                                        \
+        resultType = TYPE_LONG;                                                                            \
+      else                                                                                                 \
+        RaiseError(ErrorCodeWrongOpTypes)                                                                  \
+    } else {                                                                                               \
+      RaiseError(ErrorCodeWrongOpTypes)                                                                    \
+    }                                                                                                      \
+  }                                                                                                        \
+  let result = src1Value oper src2Value;                                                                   \
+  WRITE_TO_HEAP(result, resultType)                                                                        \
+  WRITE_DSTOPERAND2(op1, resultResultRef, resultType)
+
+#define MAKE_ARITH_UN_OP(opSign)                                                                           \
+  UPDATE_IP_DSTOPERAND1(1)                                                                                 \
+  GET_REFS_DSTOPERAND1(op1, op2)                                                                           \
+  let srcType = GetType(op2Ref);                                                                           \
+                                                                                                           \
+  READ(op2Ref, srcValue)                                                                                   \
+                                                                                                           \
+  let result = 0;                                                                                          \
+  if (srcType == TYPE_BOOL) then {                                                                         \
+    result = opSign (srcValue & 0x01);                                                                     \
+  } else if (srcType == TYPE_BYTE) then {                                                                  \
+    result = (opSign srcValue) & 0xFF;                                                                     \
+  } else if (srcType == TYPE_INT) then {                                                                   \
+    result = opSign srcValue;                                                                              \
+  } else if (srcType == TYPE_UINT) then {                                                                  \
+    result = (opSign srcValue) & 0xFFFFFFFF;                                                               \
+  } else if (srcType == TYPE_LONG) then {                                                                  \
+    result = opSign srcValue;                                                                              \
+  } else if (srcType == TYPE_ULONG) then {                                                                 \
+    result = opSign srcValue;                                                                              \
+    result = result & 0xFFFFFFFFFFFFFFFF;                                                                  \
+  } else if (srcType == TYPE_CHAR) then                                                                    \
+    result = (opSign srcValue) & 0xFF;                                                                     \
+  else {                                                                                                   \
+    RaiseError(ErrorCodeUnimplemented)                                                                     \
+  }                                                                                                        \
+  WRITE_TO_HEAP(result, srcType)                                                                           \
+  WRITE_DSTOPERAND1(op1, resultResultRef, srcType)
+#define MAKE_BINARY_UN_OP(opSign)                                                                          \
+  UPDATE_IP_DSTOPERAND1(1)                                                                                 \
+  GET_REFS_DSTOPERAND1(op1, op2)                                                                           \
+  let srcType = GetType(op2Ref);                                                                           \
+  READ(op2Ref, srcValue)                                                                                   \
+  let result = result = opSign srcValue;                                                                   \
+  WRITE_TO_HEAP(result, srcType)                                                                           \
+  WRITE_DSTOPERAND1(op1, resultResultRef, srcType)
+
+architecture ARARCH {
+registers:
+  /* Special registers */
+  storage IP[64];
+  storage FP[64];
+  storage SP[64];
+  storage HP[16];
+  storage RR[64];
+  storage IO[64];
+
+  view ip = IP;
+  /* here is top offset of stack are located */
+  view sp = SP;
+  /* frame pointer  */
+  view fp = FP;
+  view hp = HP;
+  /* here result reference after operation are stored  */
+  view rr = RR;
+  view io = IO;
+
+  /* General purpose registers */
+  storage R0[64];
+  storage R1[64];
+  storage R2[64];
+  storage R3[64];
+  storage R4[64];
+  storage R5[64];
+  storage R6[64];
+  storage R7[64];
+
+  storage s_in[8];
+  storage s_out[8];
+
+  view r0 = R0;
+  view r1 = R1;
+  view r2 = R2;
+  view r3 = R3;
+  view r4 = R4;
+  view r5 = R5;
+  view r6 = R6;
+  view r7 = R7;
+memory:
+  range code [0x0000..0xffff] {
+    cell = 8;
+    endianess = little-endian;
+    granularity = 0;
+  }
+
+  /* 
+    [section datas] 
+    0x0000
+    +-------------------+
+    |     heapBase      | <- HP is inialized to zero (heap grows up)
+    +-------------------+
+    |        ...        |
+    +-------------------+
+    |     stackBase     | <- SP is initialized to 0xffff (stack grows down)
+    +-------------------+
+    0xffff
+  */
+  range datas [0x0000..0xffff] {
+    cell = 8;
+    endianess = little-endian;
+    granularity = 0;
+  }
+  
+instructions:
+  encode stackOffset field = immediate[16]; 
+  encode imm field = immediate[64];
+  encode reg field = register {
+    r0 = 00000000,
+    r1 = 00000001,
+    r2 = 00000010,
+    r3 = 00000011,
+    r4 = 00000100,
+    r5 = 00000101,
+    r6 = 00000110,
+    r7 = 00000111,
+    rr = 00001000
+  };
+  /* Not yet used  [imm/reg/stack][imm/reg/stack][imm/reg/stack] 
+  encode operand3 sequence = alternatives {
+    imm-imm-imm = {00000000, imm as op1, imm as op2, imm as op3},
+    imm-imm-reg = {00000001, imm as op1, imm as op2, reg as op3},
+    imm-imm-stack = {00000010, imm as op1, imm as op2, stackOffset as op3},
+    imm-reg-imm = {00000011, imm as op1, reg as op2, imm as op3},
+    imm-reg-reg = {00000100, imm as op1, reg as op2, reg as op3},
+    imm-reg-stack = {00000101, imm as op1, reg as op2, stackOffset as op3},
+    imm-stack-imm = {00000110, imm as op1, stackOffset as op2, imm as op3},
+    imm-stack-reg = {00000111, imm as op1, stackOffset as op2, reg as op3},
+    imm-stack-stack = {00001000, imm as op1, stackOffset as op2, stackOffset as op3},
+    reg-imm-imm = {00001001, reg as op1, imm as op2, imm as op3},
+    reg-imm-reg = {00001010, reg as op1, imm as op2, reg as op3},
+    reg-imm-stack = {00001011, reg as op1, imm as op2, stackOffset as op3},
+    reg-reg-imm = {00001100, reg as op1, reg as op2, imm as op3},
+    reg-reg-reg = {00001101, reg as op1, reg as op2, reg as op3},
+    reg-reg-stack = {00001110, reg as op1, reg as op2, stackOffset as op3},
+    reg-stack-imm = {00001111, reg as op1, stackOffset as op2, imm as op3},
+    reg-stack-reg = {00010000, reg as op1, stackOffset as op2, reg as op3},
+    reg-stack-stack = {00010001, reg as op1, stackOffset as op2, stackOffset as op3}
+    stack-imm-imm = {00010010, stack as op1, imm as op2, imm as op3},
+    stack-imm-reg = {00010011, stack as op1, imm as op2, reg as op3},
+    stack-imm-stack = {00010100, stack as op1, imm as op2, stackOffset as op3},
+    stack-reg-imm = {00010101, stack as op1, reg as op2, imm as op3},
+    stack-reg-reg = {00010110, stack as op1, reg as op2, reg as op3},
+    stack-reg-stack = {00010111, stack as op1, reg as op2, stackOffset as op3},
+    stack-stack-imm = {00011000, stack as op1, stackOffset as op2, imm as op3},
+    stack-stack-reg = {00011001, stack as op1, stackOffset as op2, reg as op3},
+    stack-stack-stack = {00011010, stack as op1, stackOffset as op2, stackOffset as op3}
+  };
+  */
+  encode operand2 sequence = alternatives {
+    imm-imm = {00000000, imm as op1, imm as op2},
+    imm-reg = {00000001, imm as op1, reg as op2},
+    imm-stack = {00000010, imm as op1, stackOffset as op2},
+    reg-imm = {00000011, reg as op1, imm as op2},
+    reg-reg = {00000100, reg as op1, reg as op2},
+    reg-stack = {00000101, reg as op1, stackOffset as op2},
+    stack-imm = {00000110, stackOffset as op1, imm as op2},
+    stack-reg = {00000110, stackOffset as op1, reg as op2},
+    stack-stack = {00000111, stackOffset as op1, stackOffset as op2}
+  };
+  /* [imm/reg/stack] */
+  encode operand1 sequence = alternatives {
+    imm = {00000000, imm as op},
+    reg = {00000001, reg as op},
+    stackOffset = {00000010, stackOffset as op}
+  };
+  /* [imm/reg/stack][imm][imm] TODO */
+  encode operand1ImmImm sequence = alternatives {
+    /* imm = {00000000, imm as op1, imm as op2, imm as op3}, Got error when imm variant is here */
+    reg = {00000001, reg as op1, imm as op2, imm as op3},
+    stackOffset = {00000010, stackOffset as op1, imm as op2, imm as op3}
+  };
+  /* [reg/stack][imm/reg/stack] */
+  encode dstOperand1 sequence = alternatives {
+    reg-imm = {00000000, reg as op1, imm as op2},
+    reg-reg = {00000001, reg as op1, reg as op2},
+    reg-stack = {00000010, reg as op1, stackOffset as op2},
+    stack-imm = {00000100, stackOffset as op1, imm as op2},
+    stack-reg = {00000101, stackOffset as op1, reg as op2},
+    stack-stack = {00000110, stackOffset as op1, stackOffset as op2}
+  };
+  /* [reg/stack][imm/reg/stack][imm/reg/stack] */
+  encode dstOperand2 sequence = alternatives {
+    reg-imm-imm = {00000000, reg as op1, imm as op2, imm as op3},
+    reg-imm-reg = {00000001, reg as op1, imm as op2, reg as op3},
+    reg-imm-stack = {00000010, reg as op1, imm as op2, stackOffset as op3},
+    reg-reg-imm = {00000011, reg as op1, reg as op2, imm as op3},
+    reg-reg-reg = {00000100, reg as op1, reg as op2, reg as op3},
+    reg-reg-stack = {00000101, reg as op1, reg as op2, stackOffset as op3},
+    reg-stack-imm = {00000110, reg as op1, stackOffset as op2, imm as op3},
+    reg-stack-reg = {00000111, reg as op1, stackOffset as op2, reg as op3},
+    reg-stack-stack = {00001000, reg as op1, stackOffset as op2, stackOffset as op3},
+    stack-imm-imm = {00001001, stackOffset as op1, imm as op2, imm as op3},
+    stack-imm-reg = {00001010, stackOffset as op1, imm as op2, reg as op3},
+    stack-imm-stack = {00001011, stackOffset as op1, imm as op2, stackOffset as op3},
+    stack-reg-imm = {00001100, stackOffset as op1, reg as op2, imm as op3},
+    stack-reg-reg = {00001101, stackOffset as op1, reg as op2, reg as op3},
+    stack-reg-stack = {00001110, stackOffset as op1, reg as op2, stackOffset as op3},
+    stack-stack-imm = {00001111, stackOffset as op1, stackOffset as op2, imm as op3},
+    stack-stack-reg = {00010000, stackOffset as op1, stackOffset as op2, reg as op3},
+    stack-stack-stack = {00010001, stackOffset as op1, stackOffset as op2, stackOffset as op3}
+  };
+  encode regOperandImm sequence = alternatives {
+    reg-reg-imm = {00000000, reg as op1, reg as op2, imm as op3},
+    reg-imm-imm = {00000001, reg as op1, imm as op2, imm as op3},
+    reg-stack-imm = {00000010, reg as op1, stackOffset as op2, imm as op3}
+  };
+
+  /*
+   * All available semantics
+   */
+  instruction refin = {11010101} {
+    UPDATE_IP(1)
+    let b0 = s_in;
+    rr = MakeRef(TYPE_CHAR, F_IMM, b0);
+  };
+  instruction refout-instr = {11010100, sequence operand1} {
+    UPDATE_IP_OPERAND1(1)
+    GET_REFS_OPERAND1(op)
+    READ(opRef, value)
+    s_out = value & 0xFF;
+  };
+
+  instruction add-instr = {00000000, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(+)
+  };
+
+  instruction sub-instr = {00000001, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(-)
+  };
+
+  instruction mul-instr = {00000010, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(*)
+  };
+
+  instruction div-instr = {00000011, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(/)
+  };
+  instruction mod-instr = {00000100, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(%)
+  };
+  instruction bor-instr = {00000101, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(|)
+  };
+  instruction band-instr = {00000110, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(&)
+  };
+  instruction bxor-instr = {00000111, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(^)
+  };
+  instruction bshl-instr = {00001000, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(<<)
+  };
+  instruction bshr-instr = {00001001, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(>>)
+  };
+  instruction lor-instr = {00001010, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(||)
+  };
+  instruction land-instr = {00001011, sequence dstOperand2} {
+    MAKE_ARITH_BIN_OP(&&)
+  };
+
+  instruction lt-instr = {00001110, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    
+    READ(op2Ref, src1Value)
+    READ(op3Ref, src2Value)
+    
+    let src1Type = GetType(op2Ref);
+    let src2Type = GetType(op3Ref);
+ 
+    if (src1Type == TYPE_INT && src1Value & 0x80000000) then src1Value = src1Value | 0xFFFFFFFF00000000;
+    if (src2Type == TYPE_INT && src2Value & 0x80000000) then src2Value = src2Value | 0xFFFFFFFF00000000;
+    
+    let neg1 = src1Value >> 63;
+    let neg2 = src2Value >> 63;
+    
+    let result = 0;
+    if (neg1 != neg2) then {
+      result = neg1;
+    } else {
+      result = src1Value < src2Value;
+    }
+    
+    WRITE_TO_HEAP(result, TYPE_BOOL)
+    WRITE_DSTOPERAND2(op1, resultResultRef, TYPE_BOOL)
+  };
+
+  instruction gt-instr = {00010000, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    
+    READ(op2Ref, src1Value)
+    READ(op3Ref, src2Value)
+    
+    let src1Type = GetType(op2Ref);
+    let src2Type = GetType(op3Ref);
+    
+    if (src1Type == TYPE_INT && src1Value & 0x80000000) then src1Value = src1Value | 0xFFFFFFFF00000000;
+    if (src2Type == TYPE_INT && src2Value & 0x80000000) then src2Value = src2Value | 0xFFFFFFFF00000000;
+    
+    let neg1 = src1Value >> 63;
+    let neg2 = src2Value >> 63;
+    
+    let result = 0;
+    if (neg1 != neg2) then {
+      result = neg2;
+    } else {
+      result = src1Value > src2Value;
+    }
+    
+    WRITE_TO_HEAP(result, TYPE_BOOL)
+    WRITE_DSTOPERAND2(op1, resultResultRef, TYPE_BOOL)
+  };
+
+  instruction eq-instr = {00001100, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    
+    READ(op2Ref, src1Value)
+    READ(op3Ref, src2Value)
+    
+    let result = src1Value == src2Value;
+    
+    WRITE_TO_HEAP(result, TYPE_BOOL)
+    WRITE_DSTOPERAND2(op1, resultResultRef, TYPE_BOOL)
+  };
+
+  instruction neq-instr = {00001101, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    
+    READ(op2Ref, src1Value)
+    READ(op3Ref, src2Value)
+    
+    let result = src1Value != src2Value;
+    
+    WRITE_TO_HEAP(result, TYPE_BOOL)
+    WRITE_DSTOPERAND2(op1, resultResultRef, TYPE_BOOL)
+  };
+
+  instruction lte-instr = {00001111, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    
+    READ(op2Ref, src1Value)
+    READ(op3Ref, src2Value)
+    
+    let src1Type = GetType(op2Ref);
+    let src2Type = GetType(op3Ref);
+    
+    if (src1Type == TYPE_INT && src1Value & 0x80000000) then src1Value = src1Value | 0xFFFFFFFF00000000;
+    if (src2Type == TYPE_INT && src2Value & 0x80000000) then src2Value = src2Value | 0xFFFFFFFF00000000;
+    
+    let neg1 = src1Value >> 63;
+    let neg2 = src2Value >> 63;
+    
+    let result = 0;
+    if (neg1 != neg2) then {
+      result = neg1;
+    } else {
+      result = src1Value <= src2Value;
+    }
+    
+    WRITE_TO_HEAP(result, TYPE_BOOL)
+    WRITE_DSTOPERAND2(op1, resultResultRef, TYPE_BOOL)
+  };
+
+  instruction gte-instr = {00010001, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    
+    READ(op2Ref, src1Value)
+    READ(op3Ref, src2Value)
+    
+    let src1Type = GetType(op2Ref);
+    let src2Type = GetType(op3Ref);
+    
+    if (src1Type == TYPE_INT && src1Value & 0x80000000) then src1Value = src1Value | 0xFFFFFFFF00000000;
+    if (src2Type == TYPE_INT && src2Value & 0x80000000) then src2Value = src2Value | 0xFFFFFFFF00000000;
+    
+    let neg1 = src1Value >> 63;
+    let neg2 = src2Value >> 63;
+    
+    let result = 0;
+    if (neg1 != neg2) then {
+      result = neg2;
+    } else {
+      result = src1Value >= src2Value;
+    }
+    
+    WRITE_TO_HEAP(result, TYPE_BOOL)
+    WRITE_DSTOPERAND2(op1, resultResultRef, TYPE_BOOL)
+  };
+  
+  instruction neg-instr = {00010010, sequence dstOperand1} {
+    MAKE_ARITH_UN_OP(-)
+  };
+  instruction lnot-instr = {00010011, sequence dstOperand1} {
+    MAKE_ARITH_UN_OP(!)
+  };
+  instruction bnot-instr = {00010100, sequence dstOperand1} {
+    MAKE_BINARY_UN_OP(~)
+  };
+
+  instruction mv-instr = {10000000, sequence dstOperand1} {
+    UPDATE_IP_DSTOPERAND1(1)
+    GET_REFS_DSTOPERAND1(op1, op2)
+    WRITE_DSTOPERAND1(op1, op2Ref, TYPE_ULONG)
+  };
+  instruction mvv-instr = {11010110, sequence dstOperand1} {
+    UPDATE_IP_DSTOPERAND1(1)
+    GET_REFS_DSTOPERAND1(op1, op2)
+    READ(op2Ref, srcValue)
+    WRITE_DSTOPERAND1(op1, srcValue, TYPE_ULONG)
+  };
+  instruction cp-instr = {10000001, sequence dstOperand1} {
+    UPDATE_IP_DSTOPERAND1(1)
+    GET_REFS_DSTOPERAND1(op1, op2)
+    READ(op2Ref, srcValue)
+    WRITE(op1Ref, srcValue, GetType(op2Ref))
+  };
+  instruction cpr-instr = {11101101, sequence dstOperand1} {
+    UPDATE_IP_DSTOPERAND1(1)
+    GET_REFS_DSTOPERAND1(op1, op2)
+    WRITE(op1Ref, op2Ref, GetType(op1Ref))
+  };
+  instruction st-instr = {10000010, sequence dstOperand1} {
+    UPDATE_IP_DSTOPERAND1(1)
+    GET_REFS_DSTOPERAND1(op1, op2)
+
+    READ(op2Ref, val)
+    let type = GetType(op2Ref);
+    WRITE_TO_HEAP(val, type)
+    WRITE_DSTOPERAND1(op1, valResultRef, type)
+  };
+  
+  instruction ldi-instr = {10101101, reg as dstReg, imm as opImm} {
+    UPDATE_IP(1 + 1 + 8)
+    dstReg = MakeRef(TYPE_UINT, F_IMM, opImm);
+  };
+
+  instruction push-instr = {10000011, reg as opReg} {
+    UPDATE_IP(1 + 1)
+    /* WRITE reference to object to stack */
+    WRITE_TO_STACK(opReg, TYPE_ULONG)
+  };
+  instruction pop-instr = {10000100, reg as opReg} {
+    UPDATE_IP(1 + 1)
+    /* READ value (refence is always 8 byte) from stack */
+    READ_FROM_STACK(opReg, TYPE_ULONG)
+  };
+
+  instruction br-instr = {11000000, sequence operand1ImmImm} {
+    let op1Ref = op1;
+    when stackOffset then {
+      let addr = fp - op1;
+      READ_FROM_ADDR(addr, TYPE_ULONG, op1Ref)     
+    }
+    READ(op1Ref, condition)
+    if (condition != 0) then
+      ip = op2;
+    else
+      ip = op3;
+  };
+  instruction bri-instr = {11010000, imm as opImm1, imm as opImm2, imm as opImm3} {
+    let op1Ref = opImm1;
+    READ(op1Ref, condition)
+    if (condition != 0) then
+      ip = opImm2;
+    else
+      ip = opImm3;
+  };
+  instruction jmp-instr = {11000001, imm as opImm} {
+    ip = opImm;
+  };
+  /*
+   * ABI:
+   * TODO
+   */
+  instruction call-instr = {11000010, imm as opImm} {
+    let nextIp = ip + 1 + 8;
+    WRITE_TO_STACK(fp, TYPE_ULONG)
+    WRITE_TO_STACK(nextIp, TYPE_ULONG)
+    fp = sp;
+    ip = opImm;
+  };
+
+  instruction ret = {11000011} {
+    sp = fp;
+    READ_FROM_STACK(ip, TYPE_ULONG)
+    READ_FROM_STACK(fp, TYPE_ULONG)
+  };
+
+  instruction hlt = {11000100} { UPDATE_IP(1) };
+
+  instruction out-instr = {11100000, sequence operand1} {
+    UPDATE_IP_OPERAND1(1)
+    GET_REFS_OPERAND1(op)
+
+    if (IsImmediate(opRef)) then {
+      io = GetPayload(opRef);
+    } else if (IsMemory(opRef)) then {
+      READ(opRef, value)
+      io = value;
+    } else {
+      RaiseError(ErrorCodeWrongOpTypes)
+    } 
+  };
+
+  instruction usp-instr = {10110111, imm as opImm} {
+    UPDATE_IP(1 + 8)
+    sp = sp - opImm;
+  };
+
+  instruction vcall-instr = {11001110, reg as dstReg, imm as opImm} {
+    let methodHash = opImm;
+    
+    let objRef = dstReg;
+    let classId = (objRef >> 56) & 0xFF;
+    let objAddr = objRef & 0xFFFFFFFF;
+    
+    let found = 0;
+    let funcPtr = 0;
+    let currentClassId = classId;
+    
+    while (currentClassId != 0xFF && !found) do {
+      let tableAddr = 0x0000 + currentClassId * 8;
+      let entryPtr = 0;
+      READ_FROM_ADDR(tableAddr, TYPE_ULONG, entryPtr)
+      
+      if (entryPtr == 0) then {
+        // We cannot have class with id less than 9 (this is ids for builin types)
+        RaiseError(ErrorCodeUnknownType)
+      } else {
+        let numMethods = 0;
+        READ_FROM_ADDR(entryPtr + 10, TYPE_UINT, numMethods)  // +10: num_methods
+        
+        let methodsPtr = 0;
+        READ_FROM_ADDR(entryPtr + 22, TYPE_ULONG, methodsPtr)  // +22: methods_ptr
+        
+        let i = 0;
+        while (i < numMethods && !found) do {
+          // Size of method record: 8 (hash) + 8 (pointer) + 4 (visibility) = 20 byte
+          let entryAddr = methodsPtr + i * 20;
+          let entryHash = 0;
+          READ_FROM_ADDR(entryAddr, TYPE_ULONG, entryHash)
+          
+          if (entryHash == methodHash) then {
+            READ_FROM_ADDR(entryAddr + 8, TYPE_ULONG, funcPtr)
+            found = 1;
+          }
+          
+          i = i + 1;
+        }
+        
+        if (!found) then {
+          READ_FROM_ADDR(entryPtr + 1, TYPE_BYTE, currentClassId)  // +1: base_class_id
+        }
+      }
+    }
+    
+    if (!found) then {
+      RaiseError(ErrorCodeUnknownType)
+    }
+    
+    let nextIp = ip + 1 + 1 + 8;
+    WRITE_TO_STACK(fp, TYPE_ULONG)
+    WRITE_TO_STACK(nextIp, TYPE_ULONG)
+    fp = sp;
+    ip = funcPtr;
+  };
+
+  instruction ldf-instr = {11001100, reg as dstReg, reg as srcReg, imm as opImm} {
+    UPDATE_IP(1 + 1 + 1 + 8)
+    
+    let fieldHash = opImm;
+    let objRef = srcReg;
+    
+    let classId = (objRef >> 56) & 0xFF;
+    let objAddr = objRef & 0xFFFFFFFF;
+    
+    let found = 0;
+    let fieldOffset = 0;
+    let currentClassId = classId;
+    
+    while (currentClassId != 0xFF && !found) do {
+      let tableAddr = 0x0000 + currentClassId * 8;
+      let entryPtr = 0;
+      READ_FROM_ADDR(tableAddr, TYPE_ULONG, entryPtr)
+      
+      if (entryPtr == 0) then {
+        currentClassId = 0xFF;
+      } else {
+        let numFields = 0;
+        READ_FROM_ADDR(entryPtr + 6, TYPE_UINT, numFields)
+        
+        let fieldsPtr = 0;
+        READ_FROM_ADDR(entryPtr + 14, TYPE_ULONG, fieldsPtr)
+        
+        let i = 0;
+        while (i < numFields && !found) do {
+          let entryAddr = fieldsPtr + i * 12;
+          let entryHash = 0;
+          READ_FROM_ADDR(entryAddr, TYPE_ULONG, entryHash)
+          
+          if (entryHash == fieldHash) then {
+            READ_FROM_ADDR(entryAddr + 8, TYPE_UINT, fieldOffset)
+            found = 1;
+          }
+          i = i + 1;
+        }
+        
+        if (!found) then {
+          READ_FROM_ADDR(entryPtr + 1, TYPE_BYTE, currentClassId)
+        }
+      }
+    }
+    
+    if (!found) then {
+      RaiseError(ErrorCodeUnknownType)
+    }
+    
+    let valueAddr = objAddr + fieldOffset;
+    let value = 0;
+    READ_FROM_ADDR(valueAddr, TYPE_ULONG, value)
+
+    dstReg = value;
+  };
+
+  instruction stf-instr = {11001101, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    /* Third operand is constant (not encoded as reference), but this is WA, we 
+       assume what third operand in immediate, but it can be other, we don't READ it */
+    let fieldHash = op3Ref;
+    let objRef = op1Ref;
+    
+    let classId = (objRef >> 56) & 0xFF;
+    let objAddr = objRef & 0xFFFFFFFF;
+    
+    let value = op2Ref;
+    
+    let found = 0;
+    let fieldOffset = 0;
+    let currentClassId = classId;
+    
+    while (currentClassId != 0xFF && !found) do {
+      let tableAddr = 0x0000 + currentClassId * 8;
+      let entryPtr = 0;
+      READ_FROM_ADDR(tableAddr, TYPE_ULONG, entryPtr)
+      
+      if (entryPtr == 0) then {
+        currentClassId = 0xFF;
+      } else {
+        let numFields = 0;
+        READ_FROM_ADDR(entryPtr + 6, TYPE_UINT, numFields)
+        
+        let fieldsPtr = 0;
+        READ_FROM_ADDR(entryPtr + 14, TYPE_ULONG, fieldsPtr)
+        
+        let i = 0;
+        while (i < numFields && !found) do {
+          let entryAddr = fieldsPtr + i * 12;
+          let entryHash = 0;
+          READ_FROM_ADDR(entryAddr, TYPE_ULONG, entryHash)
+          
+          if (entryHash == fieldHash) then {
+            READ_FROM_ADDR(entryAddr + 8, TYPE_UINT, fieldOffset)
+            found = 1;
+          }
+          i = i + 1;
+        }
+        
+        if (!found) then {
+          READ_FROM_ADDR(entryPtr + 1, TYPE_BYTE, currentClassId)
+        }
+      }
+    }
+    
+    if (!found) then {
+      RaiseError(ErrorCodeUnknownType)
+    }
+    
+    let valueAddr = objAddr + fieldOffset;
+    WRITE_TO_ADDR(valueAddr, value, TYPE_ULONG)
+  };
+
+  instruction new-instr = {11001010, reg as dstReg, imm as opImm} {
+    UPDATE_IP(1 + 1 + 8)
+    
+    let objectId = opImm;
+    
+    let totalFields = 0;
+    let currentClassId = objectId;
+    
+    while (currentClassId != 0xFF) do {
+        let tableAddr = 0x0000 + currentClassId * 8;
+        let entryPtr = 0;
+        READ_FROM_ADDR(tableAddr, TYPE_ULONG, entryPtr)
+        
+        if (entryPtr == 0) then {
+            currentClassId = 0xFF;
+        } else {
+            let numFields = 0;
+            READ_FROM_ADDR(entryPtr + 6, TYPE_UINT, numFields)
+            totalFields = totalFields + numFields;
+            
+            READ_FROM_ADDR(entryPtr + 1, TYPE_BYTE, currentClassId)
+        }
+    }
+    
+    let objSize = totalFields * ReferenceByteSize;
+    let objAddr = hp;
+    hp = hp + objSize;
+    
+    let objRef = MakeRef(objectId, F_GLOBAL, objAddr);
+    dstReg = objRef;
+  };
+
+  instruction arn-instr = {11011100, sequence dstOperand1} {
+    UPDATE_IP_DSTOPERAND1(1)
+    GET_REFS_DSTOPERAND1(op1, op2)
+    READ(op2Ref, capacity)
+    
+    let arrSize = capacity * 8;
+    
+    let arrAddr = hp;
+    hp = hp + arrSize;
+    
+    let arrRef = MakeRef(TYPE_ULONG, F_GLOBAL, arrAddr);
+    WRITE_DSTOPERAND1(op1, arrRef, TYPE_ULONG)
+  };
+
+  instruction arg-instr = {11011101, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    let arrRef = op2Ref;
+    READ(op3Ref, indx)
+    
+    let arrAddr = arrRef & 0xFFFFFFFF;
+    let elementAddr = arrAddr + indx * 8;
+    
+    let value = 0;
+    READ_FROM_ADDR(elementAddr, TYPE_ULONG, value)
+    WRITE_DSTOPERAND2(op1, value, TYPE_ULONG)
+  };
+
+  instruction ars-instr = {11011110, sequence dstOperand2} {
+    UPDATE_IP_DSTOPERAND2(1)
+    GET_REFS_DSTOPERAND2(op1, op2, op3)
+    let arrRef = op1Ref;
+    READ(op2Ref, indx)
+    let valueRef = op3Ref;
+    
+    let arrAddr = arrRef & 0xFFFFFFFF;
+    let elementAddr = arrAddr + indx * 8;
+
+    WRITE_TO_ADDR(elementAddr, valueRef, TYPE_ULONG)
+  };
+
+  instruction savec-instr = {11011001} {
+    /* Saves all registers (except ip) to scratch buffer at 0xC000.
+     * ip must be written manually afterwards by reading PIC's
+     * InterruptedInstructionAddress from 0xF000 (offset +8 in scratch buf).
+     * No operands: nothing is corrupted before the save. */
+    UPDATE_IP(1)
+
+    let buffer = 0xC000;
+
+    WRITE_TO_ADDR(buffer + 16, fp, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 24, sp, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 32, r0, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 40, r1, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 48, r2, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 56, r3, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 64, r4, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 72, r5, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 80, r6, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 88, r7, TYPE_ULONG)
+    WRITE_TO_ADDR(buffer + 96, rr, TYPE_ULONG)
+  };
+
+  instruction loadc-instr = {11011000, reg as opReg} {
+    let buffer = opReg & 0xFFFFFFFF;
+    io = buffer;
+
+    READ_FROM_ADDR(buffer + 8,  TYPE_ULONG, ip)
+    io = 1;
+    READ_FROM_ADDR(buffer + 16, TYPE_ULONG, fp)
+    io = 2;
+    READ_FROM_ADDR(buffer + 24, TYPE_ULONG, sp)
+    io = 2;
+    READ_FROM_ADDR(buffer + 32, TYPE_ULONG, r0)
+    io = 2;
+    READ_FROM_ADDR(buffer + 40, TYPE_ULONG, r1)
+    io = 2;
+    READ_FROM_ADDR(buffer + 48, TYPE_ULONG, r2)
+    io = 2;
+    READ_FROM_ADDR(buffer + 56, TYPE_ULONG, r3)
+    io = 2;
+    READ_FROM_ADDR(buffer + 64, TYPE_ULONG, r4)
+    io = 2;
+    READ_FROM_ADDR(buffer + 72, TYPE_ULONG, r5)
+    io = 2;
+    READ_FROM_ADDR(buffer + 80, TYPE_ULONG, r6)
+    io = 2;
+    READ_FROM_ADDR(buffer + 88, TYPE_ULONG, r7)
+    io = 2;
+    READ_FROM_ADDR(buffer + 96, TYPE_ULONG, rr)
+  };
+
+  instruction nop = {11110000} { UPDATE_IP(1) };
+  instruction setsp-instr = {11110010, reg as opReg} {
+    UPDATE_IP(1 + 1)
+    sp = opReg;
+    fp = opReg;
+  };
+  /* for hp not zero because we reserve space for class info (BECAUSE IT PROBIBITED TO MAKE ANOTHER BANK FOR SUCH INFO...) */
+  instruction reset = {11110001} {
+    UPDATE_IP(1)
+    fp = 0xBFF0; /* Stack grows to down addresses. After devices addresses interval. */
+    sp = 0xBFF0; /* Stack grows to down addresses. After devices addresses interval. */
+    hp = 0x1000; /* Head grows to upper addresses. After classes data. */
+    io = 0;
+  };
+mnemonics:
+  /* destination operand can be reg/imm reference, source is reg/imm/stack operand */
+  format op1 of (op) "{1}" when imm,
+                (op) "{1}" when reg,
+                (op) "fp[{1}]" when stackOffset;
+  format op2 of (op1, op2) "{1}, {2}" when imm-imm,
+                (op1, op2) "{1}, {2}" when imm-reg,
+                (op1, op2) "{1}, fp[{2}]" when imm-stack,
+                (op1, op2) "{1}, {2}" when reg-imm,
+                (op1, op2) "{1}, {2}" when reg-reg,
+                (op1, op2) "{1}, fp[{2}]" when reg-stack,
+                (op1, op2) "fp[{1}], {2}" when stack-imm,
+                (op1, op2) "fp[{1}], {2}" when stack-reg,
+                (op1, op2) "fp[{1}], fp[{2}]" when stack-stack;
+  /* Not yet used
+  format op3 of (op1, op2, op3) "{1}, {2}, {3}" when imm-imm-imm,
+                (op1, op2, op3) "{1}, {2}, {3}" when imm-imm-reg,
+                (op1, op2, op3) "{1}, {2}, fp[{3}]" when imm-imm-stack,
+                (op1, op2, op3) "{1}, {2}, {3}" when imm-reg-imm,
+                (op1, op2, op3) "{1}, {2}, {3}" when imm-reg-reg,
+                (op1, op2, op3) "{1}, {2}, fp[{3}]" when imm-reg-stack,
+                (op1, op2, op3) "{1}, fp[{2}], {3}" when imm-stack-imm,
+                (op1, op2, op3) "{1}, fp[{2}], {3}" when imm-stack-reg,
+                (op1, op2, op3) "{1}, fp[{2}], fp[{3}]" when imm-stack-stack,
+                (op1, op2, op3) "{1}, {2}, {3}" when reg-imm-imm,
+                (op1, op2, op3) "{1}, {2}, {3}" when reg-imm-reg,
+                (op1, op2, op3) "{1}, {2}, fp[{3}]" when reg-imm-stack,
+                (op1, op2, op3) "{1}, {2}, {3}" when reg-reg-imm,
+                (op1, op2, op3) "{1}, {2}, {3}" when reg-reg-reg,
+                (op1, op2, op3) "{1}, {2}, fp[{3}]" when reg-reg-stack,
+                (op1, op2, op3) "{1}, fp[{2}], {3}" when reg-stack-imm,
+                (op1, op2, op3) "{1}, fp[{2}], {3}" when reg-stack-reg,
+                (op1, op2, op3) "{1}, fp[{2}], fp[{3}]" when reg-stack-stack,
+                (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-imm-imm,
+                (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-imm-reg,
+                (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-imm-stack,
+                (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-reg-imm,
+                (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-reg-reg,
+                (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-reg-stack,
+                (op1, op2, op3) "fp[{1}], fp[{2}], {3}" when stack-stack-imm,
+                (op1, op2, op3) "fp[{1}], fp[{2}], {3}" when stack-stack-reg,
+                (op1, op2, op3) "fp[{1}], fp[{2}], fp[{3}]" when stack-stack-stack;
+  */
+  format dst-op1 of (op1, op2) "{1}, {2}" when reg-imm,
+                    (op1, op2) "{1}, {2}" when reg-reg,
+                    (op1, op2) "{1}, fp[{2}]" when reg-stack,
+                    (op1, op2) "fp[{1}], {2}" when stack-imm,
+                    (op1, op2) "fp[{1}], {2}" when stack-reg,
+                    (op1, op2) "fp[{1}], fp[{2}]" when stack-stack;
+  format dst-op2 of (op1, op2, op3) "{1}, {2}, {3}" when reg-imm-imm,
+                    (op1, op2, op3) "{1}, {2}, {3}" when reg-imm-reg,
+                    (op1, op2, op3) "{1}, {2}, fp[{3}]" when reg-imm-stack,
+                    (op1, op2, op3) "{1}, {2}, {3}" when reg-reg-imm,
+                    (op1, op2, op3) "{1}, {2}, {3}" when reg-reg-reg,
+                    (op1, op2, op3) "{1}, {2}, fp[{3}]" when reg-reg-stack,
+                    (op1, op2, op3) "{1}, fp[{2}], {3}" when reg-stack-imm,
+                    (op1, op2, op3) "{1}, fp[{2}], {3}" when reg-stack-reg,
+                    (op1, op2, op3) "{1}, fp[{2}], fp[{3}]" when reg-stack-stack,
+                    (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-imm-imm,
+                    (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-imm-reg,
+                    (op1, op2, op3) "fp[{1}], {2}, fp[{3}]" when stack-imm-stack,
+                    (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-reg-imm,
+                    (op1, op2, op3) "fp[{1}], {2}, {3}" when stack-reg-reg,
+                    (op1, op2, op3) "fp[{1}], {2}, fp[{3}]" when stack-reg-stack,
+                    (op1, op2, op3) "fp[{1}], fp[{2}], {3}" when stack-stack-imm,
+                    (op1, op2, op3) "fp[{1}], fp[{2}], {3}" when stack-stack-reg,
+                    (op1, op2, op3) "fp[{1}], fp[{2}], fp[{3}]" when stack-stack-stack;
+  format reg-reg of (dstReg, srcReg) "{1}, {2}";
+  format reg of     (opReg) "{1}";
+  format imm of     (opImm) "{1}";
+  format imm-imm-imm of (opImm1, opImm2, opImm3) "{1}, {2}, {3}";
+  format op-imm-imm of /* (op1, op2, op3) "{1}, {2}, {3}" when imm, Got error when imm variant is here */
+                       (op1, op2, op3) "{1}, {2}, {3}" when reg,
+                       (op1, op2, op3) "fp[{1}], {2}, {3}" when stackOffset;
+  format reg-reg-imm of (dstReg, srcReg, opImm) "{1}, {2}, {3}";
+  format reg-imm of (dstReg, opImm) "{1}, {2}";
+  format reg-op-imm of (op1, op2, op3) "{1}, {2}, {3}" when reg-reg-imm,
+                       (op1, op2, op3) "{1}, {2}, {3}" when reg-imm-imm,
+                       (op1, op2, op3) "{1}, fp[{2}], {3}" when reg-stack-imm;
+
+  mnemonic add for add-instr(...) dst-op2;
+  mnemonic sub for sub-instr(...) dst-op2;
+  mnemonic mul for mul-instr(...) dst-op2;
+  mnemonic div for div-instr(...) dst-op2;
+  mnemonic mod for mod-instr(...) dst-op2;
+  mnemonic bor for bor-instr(...) dst-op2;
+  mnemonic band for band-instr(...) dst-op2;
+  mnemonic bxor for bxor-instr(...) dst-op2;
+  mnemonic bshl for bshl-instr(...) dst-op2;
+  mnemonic bshr for bshr-instr(...) dst-op2;
+  mnemonic lor for lor-instr(...) dst-op2; 
+  mnemonic land for land-instr(...) dst-op2; 
+  mnemonic eq for eq-instr(...) dst-op2;
+  mnemonic neq for neq-instr(...) dst-op2;
+  mnemonic lt for lt-instr(...) dst-op2;
+  mnemonic lte for lte-instr(...) dst-op2;
+  mnemonic gt for gt-instr(...) dst-op2;
+  mnemonic gte for gte-instr(...) dst-op2;
+
+  mnemonic neg for neg-instr(...) dst-op1;
+  mnemonic lnot for lnot-instr(...) dst-op1;
+  mnemonic bnot for bnot-instr(...) dst-op1;
+
+  mnemonic br for br-instr(...) op-imm-imm;
+  mnemonic ibr for bri-instr(...) imm-imm-imm;
+  mnemonic jmp for jmp-instr(...) imm;
+  mnemonic call for call-instr(...) imm;
+  mnemonic usp for usp-instr(...) imm;
+  mnemonic ret();
+  mnemonic hlt();
+
+  mnemonic st for st-instr(...) dst-op1;
+  mnemonic cp for cp-instr(...) dst-op1;
+  mnemonic cpr for cpr-instr(...) dst-op1;
+  mnemonic mv for mv-instr(...) dst-op1;
+  mnemonic mvv for mvv-instr(...) dst-op1;
+
+  mnemonic out for out-instr(...) op1;
+  mnemonic refout for refout-instr(...) op1;
+
+  mnemonic push for push-instr(...) reg;
+  mnemonic pop for pop-instr(...) reg;
+
+  mnemonic new for new-instr(...) reg-imm;
+  mnemonic stf for stf-instr(...) dst-op2;
+  mnemonic ldf for ldf-instr(...) reg-reg-imm;
+  mnemonic vcall for vcall-instr(...) reg-imm;
+
+  mnemonic arn for arn-instr(...) dst-op1;
+  mnemonic arg for arg-instr(...) dst-op2;
+  mnemonic ars for ars-instr(...) dst-op2;
+
+  mnemonic ldi for ldi-instr(...) reg-imm;
+
+  mnemonic savec for savec-instr();
+  mnemonic loadc for loadc-instr(...) reg;
+
+  mnemonic nop();
+  mnemonic refin();
+  mnemonic setsp for setsp-instr(...) reg;
+  mnemonic reset();
+}

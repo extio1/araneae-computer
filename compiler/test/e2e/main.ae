@@ -1,0 +1,8 @@
+method main()
+begin
+  i := 0;
+  while i < 1000; do
+  begin
+    i := i + 1;
+  end;
+end;

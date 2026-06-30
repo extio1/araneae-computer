@@ -1,0 +1,14 @@
+method fib(MaxN, CurN, A, B) 
+begin
+  if CurN < MaxN; then
+    begin
+      ret fib(MaxN, CurN + 1, A + B, A);
+    end;
+  ret B;
+end;
+
+method main()
+begin
+  Res := fib(50, 0, 1, 0);
+  ret Res;
+end;
